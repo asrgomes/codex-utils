@@ -84,12 +84,13 @@ def main() -> int:
 
 def collect_sources(repos: list[Path], specs: list[Path]) -> list[SourceFile]:
     sources: dict[str, SourceFile] = {}
+    use_root_prefix = len(repos) > 1
     for repo in repos:
         for path in listed_files(repo):
             if not path.exists() or not path.is_file():
                 continue
-            source = source_file(repo, path)
-            sources[source.path.as_posix()] = source
+            source = source_file(repo, path, use_root_prefix=use_root_prefix)
+            sources[source.label] = source
     for spec in specs:
         if spec.exists() and spec.is_file() and include_path(spec):
             source = source_file(spec.parent, spec)
@@ -124,17 +125,20 @@ def include_path(path: Path) -> bool:
     return path.suffix in TEXT_EXTENSIONS or path.name in {"pom.xml", "README", "Makefile"}
 
 
-def source_file(root: Path, path: Path) -> SourceFile:
+def source_file(root: Path, path: Path, *, use_root_prefix: bool = False) -> SourceFile:
     text = path.read_text(encoding="utf-8", errors="replace")
-    label = label_for(root, path)
+    label = label_for(root, path, use_root_prefix=use_root_prefix)
     return SourceFile(root=root, path=path, label=label, kind=kind_for(path), lines=line_count(text))
 
 
-def label_for(root: Path, path: Path) -> str:
+def label_for(root: Path, path: Path, *, use_root_prefix: bool = False) -> str:
     try:
-        return path.relative_to(root).as_posix()
+        label = path.relative_to(root).as_posix()
     except ValueError:
-        return path.as_posix()
+        label = path.as_posix()
+    if use_root_prefix:
+        return f"{root.name}/{label}"
+    return label
 
 
 def line_count(text: str) -> int:
@@ -175,16 +179,20 @@ def resolve_source(ref_text: str, by_label: dict[str, SourceFile], repos: list[P
     normalized = ref_text.strip()
     if normalized in by_label:
         return by_label[normalized]
-    for label, source in by_label.items():
-        if label.endswith("/" + normalized):
-            return source
+    matches = [source for label, source in by_label.items() if label.endswith("/" + normalized)]
+    if len(matches) == 1:
+        return matches[0]
     ref_path = Path(normalized)
     if ref_path.is_absolute() and ref_path.exists() and include_path(ref_path):
         return source_file(ref_path.parent, ref_path)
-    for repo in repos:
-        candidate = repo / normalized
-        if candidate.exists() and candidate.is_file() and include_path(candidate):
-            return source_file(repo, candidate)
+    repo_matches = [
+        (repo, repo / normalized)
+        for repo in repos
+        if (repo / normalized).exists() and (repo / normalized).is_file() and include_path(repo / normalized)
+    ]
+    if len(repo_matches) == 1:
+        repo, path = repo_matches[0]
+        return source_file(repo, path)
     return None
 
 

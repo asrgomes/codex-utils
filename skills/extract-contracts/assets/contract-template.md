@@ -12,7 +12,8 @@
 
 ## Actors
 
-- <Role name>: <External party and role in this contract; reference this role name in behavior text.>
+- <Role name>: <External party and role in this contract; reference this role name in behavior
+  text.>
 
 ## Inputs
 
@@ -24,7 +25,8 @@
 
 ## Internal State
 
-- <State that affects behavior but is not directly visible. Use "None known" for stateless behavior.>
+- <State that affects behavior but is not directly visible. Use "None known" for stateless
+  behavior.>
 
 ## Invariants
 
@@ -38,7 +40,8 @@
 
 ## Alternative Paths
 
-- <Trigger>: <Deviation from the primary path, participating actor role(s) when relevant, and observable outcome.>
+- <Trigger>: <Deviation from the primary path, participating actor role(s) when relevant, and
+  observable outcome.>
 
 ## Evidence
 

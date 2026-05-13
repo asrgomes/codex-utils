@@ -276,7 +276,7 @@ def state_clear(contract: Contract) -> bool:
     if meaningful(state) and meaningful(invariants):
         return True
     state_text = normalize_marker(state)
-    if state_text == "none known" and meaningful(invariants):
+    if state_text == "none known":
         return True
     return "stateless" in [tag.lower() for tag in contract.tags]
 
