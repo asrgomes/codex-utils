@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extract Contracts"
+  short_description: "Extract repository behavioral contracts"
+  default_prompt: "Evolve compact actor-aware contracts through local candidate generation, mutation, crossover, scoring, and selection."
