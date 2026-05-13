@@ -1,6 +1,6 @@
 # Literature Grounding
 
-Use these findings to keep extracted contracts useful for coding agents.
+Use these findings to keep extracted and reconciled contracts useful for coding agents.
 
 ## Behavioral Contracts
 
@@ -31,5 +31,5 @@ Use these findings to keep extracted contracts useful for coding agents.
 
 ## Practical Rule
 
-Extract the smallest contract that preserves a meaningful interaction. Expand only when the extra
-detail improves assumptions, guarantees, invariants, evidence, or validation.
+Extract or reconcile the smallest contract that preserves a meaningful interaction. Expand only when
+the extra detail improves assumptions, guarantees, invariants, evidence, or validation.

@@ -17,11 +17,19 @@
 
 ## Inputs
 
-- <Input, assumption, or precondition.>
+- <Input value, actor request, event, or environmental fact supplied to the interaction.>
+
+## Pre-conditions
+
+- <Required assumptions for when this contract applies.>
 
 ## Output
 
-- <Observable guarantee, result, side effect, or failure mode.>
+- <Observable result, side effect, or failure mode.>
+
+## Post-conditions
+
+- <Required guarantees after the interaction completes.>
 
 ## Internal State
 

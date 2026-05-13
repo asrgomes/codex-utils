@@ -1,19 +1,22 @@
 ---
 name: extract-contracts
 description:
-  Use when Codex is asked to identify integration boundaries, summarize local repository or
-  specification behavior as evidence-backed contract markdown, score contract quality, build a
+  Use when Codex is asked to identify integration boundaries, extract or reconcile local repository
+  or specification behavior as evidence-backed contract markdown, score contract quality, build a
   contract index, track missing coverage, or iterate until meaningful code/spec interactions are
   covered.
 ---
 
-# Extract Contracts
+# Extract and Reconcile Contracts
 
 ## Purpose
 
-Extract repository behavior into small, testable contracts that help coding agents understand what
-must stay true. A contract is not a broad repo summary; it is an evidence-backed assume/guarantee
-description of one value-delivering interaction group.
+Extract and reconcile repository behavior into small, testable contracts that help coding agents
+understand what must stay true. A contract is not a broad repo summary; it is an evidence-backed
+assume/guarantee description of one value-delivering interaction group.
+
+Use extraction to create contracts from code or specs. Use reconciliation to refresh, merge, split,
+prune, or align existing contracts against newer evidence, coverage gaps, and each other.
 
 ## Inputs And Outputs
 
@@ -46,7 +49,9 @@ fields present:
 - Purpose
 - Actors
 - Inputs
+- Pre-conditions
 - Output
+- Post-conditions
 - Internal state
 - Invariants
 - Detailed behavior
@@ -64,6 +69,12 @@ dependencies. Name actors as stable roles from the contract's point of view, suc
 Keep wording consistent across contracts; prefer the actor's role over a product, class, or vendor
 identity unless that identity is itself the role.
 
+Inputs name the values, requests, events, and environmental facts supplied to the interaction.
+Pre-conditions name the required assumptions that make the contract applicable. Output names the
+observable result, side effect, or failure mode. Post-conditions name the guarantees that must hold
+after the interaction completes. Keep `Pre-conditions` and `Post-conditions` as explicit sections;
+missing or placeholder sections reduce the existing input/output score checks.
+
 Detailed behavior describes the primary path. Name every participating actor by its role in the
 behavior text. If an actor is listed but never appears in Detailed behavior or Alternative paths,
 treat that as evidence the actor is unrelated, misnamed, too broad, or missing from the behavioral
@@ -73,9 +84,31 @@ should name its trigger, participating actor when relevant, and observable outco
 
 ## Evolutionary Refinement Loop
 
-Run refinement like a small genetic algorithm. Keep a population of candidate contracts, create
-variation through mutation and crossover, score fitness, select the best candidates, harvest useful
-fragments from rejected candidates, and repeat until the stop condition is reached.
+Run extraction or reconciliation refinement like a small genetic algorithm. Keep a population of
+candidate contracts, create variation through mutation and crossover, score fitness, select the best
+candidates, harvest useful fragments from rejected candidates, and repeat until the stop condition
+is reached.
+
+Run this loop with multiple agents concurrently whenever the runtime and user authorization allow
+agent delegation. Use concurrency to explore alternative contract boundaries, evidence slices,
+assumptions, guarantees, and reconciliation decisions in parallel; do not serialize independent
+candidate exploration when agents are available. Keep each agent's scope independent and
+self-contained, and have the coordinating agent integrate results into final contract files,
+`INDEX.md`, `COVERAGE.md`, and `.contract-state.json` to avoid write conflicts.
+
+For each round, fan out as many independent agents as practical:
+
+- Breadth extraction agents sample unrelated files, specs, tests, configs, and entrypoints.
+- Depth extraction agents follow one high-value candidate into nearby callers, callees, tests, and
+  linked specs.
+- Reconciliation agents compare existing contracts against fresh evidence, overlap, merge/split
+  candidates, and coverage gaps.
+- Critic agents score candidate alternatives, identify weak pre-conditions or post-conditions, and
+  propose evidence-backed mutations before selection.
+
+Merge the concurrent results by scoring all returned alternatives together. Preserve distinct
+contracts when alternatives have different assumptions, guarantees, actors, or validation oracles;
+otherwise cross over the strongest fragments and prune duplicates.
 
 1. Inventory the code and specs. Prefer:
    - `rg --files`
@@ -90,16 +123,16 @@ fragments from rejected candidates, and repeat until the stop condition is reach
    evidence, high-value candidates, nearby callers/callees, specs linked to sampled code, and
    `COVERAGE.md` gaps.
 3. Draft embryonic candidates from the population. Identify integration groups that deliver value
-   together. Good groups have a coherent purpose, clear actors, clear inputs/outputs, and observable
-   behavior.
+   together. Good groups have a coherent purpose, clear actors, clear inputs, pre-conditions,
+   outputs, post-conditions, and observable behavior.
 4. Mutate candidates. Change one meaningful dimension at a time: narrow or expand scope, rename
    actors as roles, add or remove an actor, split primary and alternative paths, replace weak
-   evidence, add invariants, strengthen validation oracles, or turn an unsupported claim into a
-   coverage gap.
+   evidence, add pre-conditions, add post-conditions, add invariants, strengthen validation oracles,
+   or turn an unsupported claim into a coverage gap.
 5. Cross over candidates. Combine useful fragments from two candidates when they improve one
    coherent interaction: actor roles from one, evidence from another, alternative-path triggers,
-   invariants, validation oracles, or coverage-gap notes. Do not cross over unrelated outcomes just
-   because files are near each other.
+   pre-conditions, post-conditions, invariants, validation oracles, or coverage-gap notes. Do not
+   cross over unrelated outcomes just because files are near each other.
 6. Score fitness with `scripts/contract_index.py`. Fitness includes score, overlap,
    merge/split/prune candidates, actor-behavior gaps, coverage gaps, evidence quality, and oracle
    strength. Every listed actor must be referenced by role in Detailed behavior or Alternative
@@ -113,15 +146,16 @@ fragments from rejected candidates, and repeat until the stop condition is reach
    meaningful area.
 8. Harvest before discarding. Before rejecting a weak candidate, move useful evidence-backed
    fragments into surviving contracts or `COVERAGE.md`: actor roles, alternative-path triggers and
-   outcomes, evidence links, invariants, validation ideas, assumptions, or missing interaction
-   areas.
+   outcomes, evidence links, pre-conditions, post-conditions, invariants, validation ideas,
+   assumptions, or missing interaction areas.
 9. Repeat. Use selected candidates plus harvested gaps as the next population. Stop only after two
    consecutive rounds have no material changes. Use an 8-round hard cap and write an unresolved
    convergence note if it is reached.
 
 Material changes include contract additions/removals, id changes, score changes, fitness-check
 changes, merge/split decisions, relationship changes, actor-list changes, actor-behavior-reference
-changes, alternative-path changes, harvested-fragment changes, or coverage-gap changes.
+changes, pre-condition changes, post-condition changes, alternative-path changes,
+harvested-fragment changes, or coverage-gap changes.
 
 ## Scoring
 
@@ -129,10 +163,10 @@ Use the 0-9 rubric in `references/scoring-rubric.md`. The short version is one p
 
 - overlap no more than 20%
 - maps to existing code/spec evidence
-- inputs are clear
+- inputs and pre-conditions are clear
 - actors are referenced by role in behavior or alternative-path text
-- output is clear
-- output follows from inputs and described interactions
+- output and post-conditions are clear
+- output and post-conditions follow from inputs, pre-conditions, and described interactions
 - internal state/invariants are explicit when relevant
 - adds real value
 - is testable

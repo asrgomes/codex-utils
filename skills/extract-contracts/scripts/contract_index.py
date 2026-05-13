@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse, score, and index extracted contract markdown files."""
+"""Parse, score, and index extracted or reconciled contract markdown files."""
 
 from __future__ import annotations
 
@@ -18,8 +18,26 @@ SECTIONS = {
     "purpose": "purpose",
     "inputs": "inputs",
     "input": "inputs",
+    "pre-condition": "pre_conditions",
+    "pre-conditions": "pre_conditions",
+    "pre condition": "pre_conditions",
+    "pre conditions": "pre_conditions",
+    "precondition": "pre_conditions",
+    "preconditions": "pre_conditions",
+    "assumption": "pre_conditions",
+    "assumptions": "pre_conditions",
+    "requires": "pre_conditions",
     "output": "output",
     "outputs": "output",
+    "post-condition": "post_conditions",
+    "post-conditions": "post_conditions",
+    "post condition": "post_conditions",
+    "post conditions": "post_conditions",
+    "postcondition": "post_conditions",
+    "postconditions": "post_conditions",
+    "guarantee": "post_conditions",
+    "guarantees": "post_conditions",
+    "ensures": "post_conditions",
     "internal state": "internal_state",
     "invariants": "invariants",
     "detailed behavior": "behavior",
@@ -40,6 +58,11 @@ EMPTY_MARKERS = {
     "todo",
     "<todo>",
     "<input, assumption, or precondition.>",
+    "<input value, actor request, event, or environmental fact supplied to the interaction.>",
+    "<observable guarantee, result, side effect, or failure mode.>",
+    "<observable result, side effect, or failure mode.>",
+    "<required assumptions for when this contract applies.>",
+    "<required guarantees after the interaction completes.>",
     "<role name>: <external party and role in this contract.>",
     "<role name>: <external party and role in this contract; reference this role name in behavior text.>",
     "<interaction step naming participating actor role(s).>",
@@ -68,7 +91,7 @@ class Contract:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Score and index extracted contract markdown.")
+    parser = argparse.ArgumentParser(description="Score and index extracted or reconciled contract markdown.")
     parser.add_argument("contracts_dir", help="Directory containing contract .md files.")
     parser.add_argument("--coverage", help="Optional COVERAGE.md path included in convergence checks.")
     parser.add_argument("--state", help="Optional state JSON path for convergence tracking.")
@@ -168,7 +191,9 @@ def token_set(contract: Contract) -> set[str]:
             contract.sections.get("purpose", ""),
             contract.sections.get("actors", ""),
             contract.sections.get("inputs", ""),
+            contract.sections.get("pre_conditions", ""),
             contract.sections.get("output", ""),
+            contract.sections.get("post_conditions", ""),
             contract.sections.get("invariants", ""),
             contract.sections.get("behavior", ""),
             contract.sections.get("alternative_paths", ""),
@@ -187,9 +212,13 @@ def score(contract: Contract) -> None:
     checks = {
         "low_overlap": contract.max_overlap <= 0.2,
         "evidence": meaningful(contract.sections.get("evidence", "")) and ":" in contract.sections.get("evidence", ""),
-        "inputs": meaningful(contract.sections.get("inputs", "")) and meaningful(contract.sections.get("actors", "")),
+        "inputs": (
+            meaningful(contract.sections.get("inputs", ""))
+            and meaningful(contract.sections.get("pre_conditions", ""))
+            and meaningful(contract.sections.get("actors", ""))
+        ),
         "actor_behavior": actors_referenced_in_behavior(contract),
-        "output": meaningful(contract.sections.get("output", "")),
+        "output": meaningful(contract.sections.get("output", "")) and meaningful(contract.sections.get("post_conditions", "")),
         "determinacy": deterministic(contract),
         "state": state_clear(contract),
         "value": len(words(contract.sections.get("purpose", ""))) >= 8,
@@ -263,10 +292,12 @@ def deterministic(contract: Contract) -> bool:
     behavior = contract.sections.get("behavior", "")
     alternative_paths = contract.sections.get("alternative_paths", "")
     inputs = contract.sections.get("inputs", "")
+    pre_conditions = contract.sections.get("pre_conditions", "")
+    post_conditions = contract.sections.get("post_conditions", "")
     actors = contract.sections.get("actors", "")
     if not meaningful(output) or not meaningful(behavior):
         return False
-    combined = f"{actors}\n{inputs}\n{behavior}\n{alternative_paths}".lower()
+    combined = f"{actors}\n{inputs}\n{pre_conditions}\n{behavior}\n{alternative_paths}\n{output}\n{post_conditions}".lower()
     return any(word in combined for word in ("when", "then", "return", "produce", "emit", "throw", "fail", "parse", "write", "read"))
 
 

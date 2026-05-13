@@ -43,7 +43,7 @@ class FileRecord:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Inventory local repos and specs for contract extraction.")
+    parser = argparse.ArgumentParser(description="Inventory local repos and specs for contract extraction or reconciliation.")
     parser.add_argument("--repo", action="append", default=[], help="Local repository path. May be repeated.")
     parser.add_argument("--spec", action="append", default=[], help="Local specification file path. May be repeated.")
     parser.add_argument("--output", help="Optional JSON output path.")
