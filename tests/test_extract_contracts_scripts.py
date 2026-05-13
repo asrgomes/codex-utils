@@ -220,6 +220,25 @@ def test_placeholder_condition_sections_fail_io_checks(tmp_path):
     assert contract.checks["output"] is False
 
 
+def test_prune_candidates_only_include_scores_below_twenty_percent_of_observed_max(tmp_path):
+    contract_index = load_script("contract_index")
+
+    contracts = [
+        contract_index.Contract(path=tmp_path / "contract-high.md", unique_id="contract-high", tags=["shared"], score=10),
+        contract_index.Contract(path=tmp_path / "contract-strong.md", unique_id="contract-strong", tags=["shared"], score=8),
+        contract_index.Contract(path=tmp_path / "contract-good.md", unique_id="contract-good", tags=["shared"], score=7),
+        contract_index.Contract(path=tmp_path / "contract-mid.md", unique_id="contract-mid", tags=["shared"], score=6),
+        contract_index.Contract(path=tmp_path / "contract-boundary.md", unique_id="contract-boundary", tags=["shared"], score=2),
+        contract_index.Contract(path=tmp_path / "contract-weak.md", unique_id="contract-weak", tags=["only-weak"], score=1),
+    ]
+
+    candidates = contract_index.prune_candidates(contracts)
+
+    assert [candidate["id"] for candidate in candidates] == ["contract-weak"]
+    assert candidates[0]["preserve_as_gap"] is True
+    assert candidates[0]["sole_tags"] == ["only-weak"]
+
+
 def test_skill_definition_mentions_contract_reconciliation_support():
     skill_dir = ROOT / "skills" / "extract-contracts"
     skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8").lower()

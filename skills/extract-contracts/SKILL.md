@@ -141,9 +141,9 @@ otherwise cross over the strongest fragments and prune duplicates.
 7. Select candidates. Keep the highest-fitness, least-overlapping contracts that preserve coverage
    diversity. If two contracts overlap above 20%, consider merging them unless they have distinct
    assumptions, guarantees, or test oracles. If a contract has unrelated outcomes, unclear IO, too
-   many actors, or too many independent interactions, split it. Prune the lower 20% by score, but
-   preserve a low-scoring contract as a missing-coverage note when it is the only contract for a
-   meaningful area.
+   many actors, or too many independent interactions, split it. Prune only contracts scoring less
+   than 20% of the current population's maximum score; do not prune the bottom fifth by rank. Preserve
+   a low-scoring contract as a missing-coverage note when it is the only contract for a meaningful area.
 8. Harvest before discarding. Before rejecting a weak candidate, move useful evidence-backed
    fragments into surviving contracts or `COVERAGE.md`: actor roles, alternative-path triggers and
    outcomes, evidence links, pre-conditions, post-conditions, invariants, validation ideas,

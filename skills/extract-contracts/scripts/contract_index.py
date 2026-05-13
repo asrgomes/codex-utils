@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -392,7 +391,8 @@ def split_candidates(contracts: list[Contract]) -> list[dict]:
 def prune_candidates(contracts: list[Contract]) -> list[dict]:
     if not contracts:
         return []
-    count = max(1, math.ceil(len(contracts) * 0.2))
+    max_score = max(contract.score for contract in contracts)
+    threshold = max_score * 0.2
     tag_counts: dict[str, int] = {}
     for contract in contracts:
         for tag in contract.tags:
@@ -400,13 +400,13 @@ def prune_candidates(contracts: list[Contract]) -> list[dict]:
     ranked = sorted(contracts, key=lambda item: (item.score, item.display_id))
     candidates = []
     for contract in ranked:
+        if contract.score >= threshold:
+            continue
         sole_tags = [tag for tag in contract.tags if tag_counts.get(tag, 0) == 1]
         if sole_tags:
             candidates.append({"id": contract.display_id, "score": contract.score, "preserve_as_gap": True, "sole_tags": sole_tags})
         else:
             candidates.append({"id": contract.display_id, "score": contract.score, "preserve_as_gap": False, "sole_tags": []})
-        if len(candidates) >= count:
-            break
     return candidates
 
 

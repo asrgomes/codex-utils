@@ -47,6 +47,7 @@ steps.
 
 ## Prune Guidance
 
-Prune the lower 20% by score after merge/split review. If a low-scoring contract is sole coverage
-for an important area, keep the area in `COVERAGE.md` as a missing-contract guideline instead of
-silently deleting it.
+After merge/split review, prune only contracts scoring less than 20% of the current population's
+maximum score. Do not prune the bottom fifth by rank; that can remove valid contracts when the whole
+population scores well. If a low-scoring contract is sole coverage for an important area, keep the
+area in `COVERAGE.md` as a missing-contract guideline instead of silently deleting it.
