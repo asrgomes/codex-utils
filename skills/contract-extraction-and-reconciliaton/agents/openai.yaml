@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contract Extraction and Reconciliaton"
+  short_description: "Extract and reconcile source-anchored contracts from smart boundary inventories"
+  default_prompt: "Require user-specified max_iterations and min_contracts, then profile the project, build or reuse a source-anchored boundary inventory, use parallel agents for self-contained structure and boundary probes, select inventory/gap/evidence-backed candidates, treat tests as signals rather than anchors, keep the 5%-of-top drop rule bounded by minimum retained count, stop only at max_iterations, and report the final process summary."

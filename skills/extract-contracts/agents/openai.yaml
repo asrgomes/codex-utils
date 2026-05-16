@@ -1,4 +1,0 @@
-interface:
-  display_name: "Extract and Reconcile Contracts"
-  short_description: "Extract and reconcile contracts with parallel alternative exploration"
-  default_prompt: "Run parallel extraction and reconciliation agents where available, then evolve compact actor-aware contracts with explicit pre-conditions, post-conditions, local evidence, scoring, and selection."

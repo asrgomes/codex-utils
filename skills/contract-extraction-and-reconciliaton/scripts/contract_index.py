@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 IGNORED_NAMES = {"INDEX.md", "COVERAGE.md"}
+DROP_THRESHOLD_RATIO = 0.05
 SECTIONS = {
     "actors": "actors",
     "purpose": "purpose",
@@ -93,21 +94,68 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Score and index extracted or reconciled contract markdown.")
     parser.add_argument("contracts_dir", help="Directory containing contract .md files.")
     parser.add_argument("--coverage", help="Optional COVERAGE.md path included in convergence checks.")
-    parser.add_argument("--state", help="Optional state JSON path for convergence tracking.")
+    parser.add_argument("--state", help="Optional .contract-state.json path for iteration and convergence tracking.")
+    parser.add_argument(
+        "--max-iterations",
+        type=positive_int,
+        help="User-specified maximum refinement iterations. Required when writing loop state unless already present in state.",
+    )
+    parser.add_argument(
+        "--min-contracts",
+        type=positive_int,
+        help="User-specified minimum number of contracts to retain before any drop decision is allowed.",
+    )
+    parser.add_argument(
+        "--iteration",
+        type=positive_int,
+        help="Current iteration number. Defaults to previous state iteration + 1.",
+    )
+    parser.add_argument(
+        "--replay-seed",
+        action="append",
+        default=[],
+        help="Candidate seed used this iteration. May be repeated; pending seeds written by candidate_seeds.py are consumed automatically.",
+    )
+    parser.add_argument(
+        "--candidate-outcome",
+        action="append",
+        default=[],
+        help="Evidence that a sampled candidate was analyzed and triaged. May be repeated.",
+    )
     parser.add_argument("--write-state", action="store_true", help="Write convergence state.")
     parser.add_argument("--write-index", action="store_true", help="Write INDEX.md into the contracts directory.")
     parser.add_argument("--format", choices=("json", "markdown"), default="json", help="Output format.")
     args = parser.parse_args()
 
+    if args.write_state and not args.state:
+        parser.error("--write-state requires --state")
+
     contracts_dir = Path(args.contracts_dir)
+    previous_state = read_state(Path(args.state)) if args.state else {}
+    previous_max_iterations = previous_state.get("max_iterations")
+    if args.write_state and args.max_iterations is None and previous_max_iterations is None:
+        parser.error("--max-iterations is required when writing loop state for the first time")
+    previous_min_contracts = previous_state.get("min_contracts")
+    if args.min_contracts is None and previous_min_contracts is None:
+        parser.error("--min-contracts is required")
+
     contracts = load_contracts(contracts_dir)
     compute_overlaps(contracts)
     for contract in contracts:
         score(contract)
 
-    result = build_result(contracts, args.coverage, args.state)
+    result = build_result(
+        contracts,
+        coverage=args.coverage,
+        previous_state=previous_state,
+        max_iterations=args.max_iterations,
+        min_contracts=args.min_contracts,
+        iteration=args.iteration,
+        replay_seeds=args.replay_seed,
+        candidate_outcomes=args.candidate_outcome,
+    )
     if args.write_state and args.state:
-        write_state(Path(args.state), result["convergence"])
+        write_state(Path(args.state), result["state"])
     if args.write_index:
         write_index(contracts_dir / "INDEX.md", result)
 
@@ -116,6 +164,13 @@ def main() -> int:
     else:
         print(json.dumps(result, indent=2, sort_keys=True))
     return 0
+
+
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
 
 
 def load_contracts(contracts_dir: Path) -> list[Contract]:
@@ -320,22 +375,108 @@ def testable(contract: Contract) -> bool:
     return any(word in joined for word in ("scenario", "negative", "oracle", "test", "assert", "invariant", "mutation", "runtime"))
 
 
-def build_result(contracts: list[Contract], coverage: str | None, state: str | None) -> dict:
+def build_result(
+    contracts: list[Contract],
+    *,
+    coverage: str | None,
+    previous_state: dict,
+    max_iterations: int | None,
+    min_contracts: int | None,
+    iteration: int | None,
+    replay_seeds: list[str],
+    candidate_outcomes: list[str],
+) -> dict:
     material_hash = compute_material_hash(contracts, coverage)
-    previous = read_state(Path(state)) if state else {}
-    stable_rounds = previous.get("stable_rounds", 0) + 1 if previous.get("material_hash") == material_hash else 0
-    stop = stable_rounds >= 2
+    merge = merge_candidates(contracts)
+    split = split_candidates(contracts)
+    previous_min_contracts = previous_state.get("min_contracts")
+    if min_contracts is not None:
+        effective_min_contracts = min_contracts
+    elif previous_min_contracts is None:
+        effective_min_contracts = 0
+    else:
+        effective_min_contracts = int(previous_min_contracts)
+    drop = drop_candidates(contracts, effective_min_contracts)
+    ranked = ranked_contracts(contracts)
+
+    effective_iteration = iteration or int(previous_state.get("iteration", 0)) + 1
+    previous_max_iterations = previous_state.get("max_iterations")
+    if max_iterations is not None:
+        effective_max_iterations = max_iterations
+    elif previous_max_iterations is None:
+        effective_max_iterations = None
+    else:
+        effective_max_iterations = int(previous_max_iterations)
+    pending_replay_seeds = [str(seed) for seed in list_value(previous_state.get("pending_replay_seeds")) if str(seed)]
+    iteration_replay_seeds = unique_strings(pending_replay_seeds + [str(seed) for seed in replay_seeds if str(seed)])
+    iteration_candidate_outcomes = unique_strings([str(outcome) for outcome in candidate_outcomes if str(outcome)])
+    fresh_candidate_complete = bool(iteration_replay_seeds) and bool(iteration_candidate_outcomes)
+
+    rank_payload = rank_signature_payload(ranked, merge, split, drop)
+    rank_signature = stable_hash(rank_payload)
+    previous_signature = previous_rank_signature(previous_state)
+    rank_changed = previous_signature is not None and previous_signature != rank_signature
+
+    stop_reasons: list[str] = []
+    if effective_max_iterations is not None and effective_iteration >= effective_max_iterations:
+        stop_reasons.append(f"max_iterations reached ({effective_iteration}/{effective_max_iterations})")
+
+    convergence = {
+        "rank_signature": rank_signature,
+        "previous_rank_signature": previous_signature,
+        "rank_changed": rank_changed,
+        "stop": bool(stop_reasons),
+        "stop_reasons": stop_reasons,
+    }
+
+    rank_history = list_value(previous_state.get("rank_history"))
+    rank_history.append(
+        {
+            "iteration": effective_iteration,
+            "rank_signature": rank_signature,
+            "ranked_contracts": ranked,
+            "merge_candidates": merge,
+            "split_candidates": split,
+            "drop_candidates": drop,
+            "replay_seeds": iteration_replay_seeds,
+            "candidate_outcomes": iteration_candidate_outcomes,
+            "fresh_candidate_complete": fresh_candidate_complete,
+        }
+    )
+
+    all_replay_seeds = unique_strings(list_value(previous_state.get("replay_seeds")) + iteration_replay_seeds)
+    state = {
+        "schema_version": 2,
+        "iteration": effective_iteration,
+        "max_iterations": effective_max_iterations,
+        "min_contracts": effective_min_contracts,
+        "material_hash": material_hash,
+        "replay_seeds": all_replay_seeds,
+        "pending_replay_seeds": [],
+        "candidate_outcomes": iteration_candidate_outcomes,
+        "seed_history": list_value(previous_state.get("seed_history")),
+        "rank_history": rank_history,
+        "convergence": convergence,
+    }
+
     return {
         "contracts": [contract_summary(contract) for contract in contracts],
-        "merge_candidates": merge_candidates(contracts),
-        "split_candidates": split_candidates(contracts),
-        "prune_candidates": prune_candidates(contracts),
-        "convergence": {
-            "material_hash": material_hash,
-            "previous_hash": previous.get("material_hash"),
-            "stable_rounds": stable_rounds,
-            "stop": stop,
+        "ranked_contracts": ranked,
+        "merge_candidates": merge,
+        "split_candidates": split,
+        "drop_candidates": drop,
+        "prune_candidates": drop,
+        "drop_threshold": drop_threshold_summary(contracts, effective_min_contracts),
+        "iteration": {
+            "iteration": effective_iteration,
+            "max_iterations": effective_max_iterations,
+            "min_contracts": effective_min_contracts,
+            "replay_seeds": iteration_replay_seeds,
+            "candidate_outcomes": iteration_candidate_outcomes,
+            "fresh_candidate_complete": fresh_candidate_complete,
         },
+        "convergence": convergence,
+        "state": state,
     }
 
 
@@ -352,6 +493,25 @@ def contract_summary(contract: Contract) -> dict:
         "links": contract.links,
         "top_overlaps": contract.overlaps[:3],
     }
+
+
+def ranked_contracts(contracts: list[Contract]) -> list[dict]:
+    ranked = sorted(contracts, key=lambda item: (-item.score, item.max_overlap, item.display_id))
+    rows = []
+    for index, contract in enumerate(ranked, start=1):
+        failed_checks = sorted(check for check, passed in contract.checks.items() if not passed)
+        rows.append(
+            {
+                "rank": index,
+                "id": contract.display_id,
+                "score": contract.score,
+                "max_overlap": round(contract.max_overlap, 3),
+                "failed_checks": failed_checks,
+                "actor_behavior_gaps": contract.actor_behavior_gaps,
+                "links": sorted(contract.links),
+            }
+        )
+    return rows
 
 
 def merge_candidates(contracts: list[Contract]) -> list[dict]:
@@ -388,26 +548,122 @@ def split_candidates(contracts: list[Contract]) -> list[dict]:
     return candidates
 
 
-def prune_candidates(contracts: list[Contract]) -> list[dict]:
+def drop_candidates(contracts: list[Contract], min_contracts: int = 0) -> list[dict]:
     if not contracts:
         return []
+    drop_budget = max(0, len(contracts) - min_contracts)
+    if drop_budget == 0:
+        return []
     max_score = max(contract.score for contract in contracts)
-    threshold = max_score * 0.2
+    threshold = max_score * DROP_THRESHOLD_RATIO
     tag_counts: dict[str, int] = {}
     for contract in contracts:
         for tag in contract.tags:
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
-    ranked = sorted(contracts, key=lambda item: (item.score, item.display_id))
+    ranked = sorted(contracts, key=lambda item: (item.score, -item.max_overlap, item.display_id))
     candidates = []
     for contract in ranked:
+        if len(candidates) >= drop_budget:
+            break
         if contract.score >= threshold:
             continue
         sole_tags = [tag for tag in contract.tags if tag_counts.get(tag, 0) == 1]
+        item = {
+            "id": contract.display_id,
+            "score": contract.score,
+            "top_score": max_score,
+            "threshold": round(threshold, 3),
+            "preserve_as_gap": bool(sole_tags),
+            "sole_tags": sole_tags,
+        }
         if sole_tags:
-            candidates.append({"id": contract.display_id, "score": contract.score, "preserve_as_gap": True, "sole_tags": sole_tags})
+            candidates.append(item)
         else:
-            candidates.append({"id": contract.display_id, "score": contract.score, "preserve_as_gap": False, "sole_tags": []})
+            candidates.append(item)
     return candidates
+
+
+def prune_candidates(contracts: list[Contract], min_contracts: int = 0) -> list[dict]:
+    """Backward-compatible alias for older callers; the workflow now calls these drops."""
+    return drop_candidates(contracts, min_contracts)
+
+
+def drop_threshold_summary(contracts: list[Contract], min_contracts: int) -> dict:
+    top_score = max((contract.score for contract in contracts), default=0)
+    return {
+        "ratio": DROP_THRESHOLD_RATIO,
+        "top_score": top_score,
+        "threshold": round(top_score * DROP_THRESHOLD_RATIO, 3),
+        "min_contracts": min_contracts,
+        "drop_budget": max(0, len(contracts) - min_contracts),
+    }
+
+
+def rank_signature_payload(
+    ranked: list[dict],
+    merge: list[dict],
+    split: list[dict],
+    drop: list[dict],
+) -> dict:
+    return {
+        "ranked_contracts": [
+            {
+                "rank": item["rank"],
+                "id": item["id"],
+                "score": item["score"],
+                "max_overlap": item["max_overlap"],
+                "failed_checks": item["failed_checks"],
+                "actor_behavior_gaps": item["actor_behavior_gaps"],
+                "links": item["links"],
+            }
+            for item in ranked
+        ],
+        "merge_candidates": merge,
+        "split_candidates": split,
+        "drop_candidates": drop,
+    }
+
+
+def stable_hash(payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def previous_rank_signature(previous: dict) -> str | None:
+    history = previous.get("rank_history", [])
+    if isinstance(history, list) and history:
+        last = history[-1]
+        if isinstance(last, dict):
+            signature = last.get("rank_signature")
+            if isinstance(signature, str):
+                return signature
+    convergence = previous.get("convergence", {})
+    if isinstance(convergence, dict):
+        signature = convergence.get("rank_signature")
+        if isinstance(signature, str):
+            return signature
+    signature = previous.get("rank_signature")
+    return signature if isinstance(signature, str) else None
+
+
+def unique_strings(values: list) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def list_value(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
 
 
 def compute_material_hash(contracts: list[Contract], coverage: str | None) -> str:
@@ -435,9 +691,9 @@ def read_state(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def write_state(path: Path, convergence: dict) -> None:
+def write_state(path: Path, state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(convergence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def write_index(path: Path, result: dict) -> None:
@@ -449,12 +705,16 @@ def render_index(result: dict) -> str:
     lines = [
         "# Contract Index",
         "",
-        "| Score | Contract | Max overlap | Tags |",
-        "| ---: | --- | ---: | --- |",
+        "| Rank | Score | Contract | Max overlap | Tags |",
+        "| ---: | ---: | --- | ---: | --- |",
     ]
-    for contract in result["contracts"]:
+    contracts_by_id = {contract["id"]: contract for contract in result["contracts"]}
+    for ranked in result["ranked_contracts"]:
+        contract = contracts_by_id[ranked["id"]]
         tags = ", ".join(contract["tags"])
-        lines.append(f"| {contract['score']} | `{contract['id']}` | {contract['max_overlap']:.3f} | {tags} |")
+        lines.append(
+            f"| {ranked['rank']} | {contract['score']} | `{contract['id']}` | {contract['max_overlap']:.3f} | {tags} |"
+        )
     lines.extend(["", "## Merge Candidates", ""])
     if result["merge_candidates"]:
         for item in result["merge_candidates"]:
@@ -475,23 +735,48 @@ def render_index(result: dict) -> str:
             lines.append(f"- `{contract['id']}` missing behavior references for actor(s): {actors}")
     else:
         lines.append("- None")
-    lines.extend(["", "## Prune Candidates", ""])
-    if result["prune_candidates"]:
-        for item in result["prune_candidates"]:
-            suffix = " preserve as coverage gap" if item["preserve_as_gap"] else " prune"
+    threshold = result["drop_threshold"]
+    lines.extend(
+        [
+            "",
+            "## Drop Candidates",
+            "",
+            f"- Threshold: score below {threshold['threshold']:.3f} "
+            f"({threshold['ratio']:.0%} of top score {threshold['top_score']})",
+            f"- Minimum retained contracts: {threshold['min_contracts']}",
+            f"- Drop budget: {threshold['drop_budget']}",
+        ]
+    )
+    if result["drop_candidates"]:
+        for item in result["drop_candidates"]:
+            suffix = " preserve as coverage gap" if item["preserve_as_gap"] else " drop"
             lines.append(f"- `{item['id']}` score {item['score']} -{suffix}")
     else:
         lines.append("- None")
+    iteration = result["iteration"]
     convergence = result["convergence"]
+    stop_reasons = convergence["stop_reasons"] or ["not reached"]
     lines.extend(
         [
             "",
             "## Convergence",
             "",
-            f"- Stable rounds: {convergence['stable_rounds']}",
+            f"- Iteration: {iteration['iteration']}"
+            + (f" / {iteration['max_iterations']}" if iteration["max_iterations"] is not None else ""),
+            f"- Minimum retained contracts: {iteration['min_contracts']}",
+            f"- Fresh candidates complete: {str(iteration['fresh_candidate_complete']).lower()}",
             f"- Stop: {str(convergence['stop']).lower()}",
+            f"- Stop reason: {'; '.join(stop_reasons)}",
         ]
     )
+    if iteration["replay_seeds"]:
+        lines.extend(["", "## Replay Seeds", ""])
+        for seed in iteration["replay_seeds"]:
+            lines.append(f"- `{seed}`")
+    if iteration["candidate_outcomes"]:
+        lines.extend(["", "## Candidate Outcomes", ""])
+        for outcome in iteration["candidate_outcomes"]:
+            lines.append(f"- {outcome}")
     return "\n".join(lines) + "\n"
 
 
