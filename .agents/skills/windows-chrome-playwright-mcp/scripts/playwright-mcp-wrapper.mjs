@@ -6,6 +6,7 @@ import {
   exitFromResult,
   fail,
   forwardCapturedToStderr,
+  getCdpVersion,
   mcpBin,
   runNodeScript,
 } from './lib.mjs';
@@ -19,10 +20,18 @@ function runSetup(scriptName, args = []) {
   exitFromResult(result, `${scriptName} failed`);
 }
 
+async function requireCdpHealth() {
+  const result = await getCdpVersion(cdpPort, 3000);
+  if (!result.ok) {
+    const detail = result.error?.message || `HTTP status ${result.statusCode ?? '<none>'}`;
+    fail(`Chrome CDP is not reachable from WSL at ${cdpEndpoint}/json/version: ${detail}`);
+  }
+}
+
 runSetup('doctor.mjs', ['--preflight']);
 runSetup('ensure-playwright-mcp.mjs');
-runSetup('ensure-windows-chrome-debug.mjs');
-runSetup('doctor.mjs', ['--cdp']);
+runSetup('chrome-debug.mjs', ['ensure', '--port', String(cdpPort)]);
+await requireCdpHealth();
 
 const result = spawnSync(mcpBin, [
   '--cdp-endpoint',

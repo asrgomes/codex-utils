@@ -23,21 +23,30 @@ No browser automation was attempted.
 
 ## MCP Tools Do Not Appear
 
-Run:
+Run these commands with Codex command execution permission escalation:
 
 ```bash
+node scripts/bootstrap.mjs
+codex mcp get windows-chrome
+```
+
+If you need to run the steps separately, use:
+
+```bash
+node scripts/doctor.mjs --preflight
 node scripts/ensure-playwright-mcp.mjs
 node scripts/install-codex-mcp.mjs
 codex mcp get windows-chrome
 ```
 
-If the server was just added, restart the Codex CLI session. Some clients load MCP server
-configuration only at session start.
+If the server was just added or replaced, restart the Codex CLI session. Some clients load MCP
+server configuration only at session start.
 
 ## Playwright MCP Install Fails
 
 The skill installs `@playwright/mcp` into `.runtime/` under the skill directory. If install fails,
-confirm Node.js 24+ is active and check npm proxy and registry access from WSL:
+confirm Node.js 24+ is active and check npm proxy and registry access from WSL. Run these with
+permission escalation because npm and WSL/Windows checks may cross the sandbox boundary:
 
 ```bash
 node -v
@@ -48,7 +57,7 @@ node scripts/ensure-playwright-mcp.mjs
 
 ## Chrome Does Not Start
 
-Run:
+Run these commands with permission escalation:
 
 ```bash
 node scripts/doctor.mjs --preflight

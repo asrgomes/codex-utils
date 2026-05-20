@@ -3,9 +3,14 @@
 Use Playwright MCP through the configured `windows-chrome` server. Tool names vary by client, but
 the preferred pattern is stable.
 
+Do not use direct Chrome DevTools Protocol endpoints for normal page operations. Calls such as
+`/json/new`, `/json/list`, raw CDP WebSocket messages, or ad hoc `curl` navigation are only for
+connectivity or health checks while diagnosing the skill-owned Chrome profile. If Playwright MCP is
+not available, fix or report that MCP availability problem instead of bypassing it.
+
 ## Page Navigation
 
-1. Navigate directly to the target URL.
+1. Navigate to the target URL through Playwright MCP.
 2. Wait for the page to settle.
 3. Inspect the accessibility snapshot before acting.
 4. Prefer semantic targets over coordinates.

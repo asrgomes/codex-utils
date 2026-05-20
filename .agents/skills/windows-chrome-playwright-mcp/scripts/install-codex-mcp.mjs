@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import {
+  fail,
   requireCommand,
+  resultText,
   run,
   runOrExit,
   scriptDir,
@@ -12,19 +14,41 @@ const wrapper = path.join(scriptDir, 'playwright-mcp-wrapper.mjs');
 
 requireCommand('codex');
 
+function serverMatches(output) {
+  const text = output.replace(/\r/g, '');
+  return text.includes(process.execPath) &&
+    text.includes(wrapper) &&
+    !text.toLowerCase().includes('(disabled)');
+}
+
+function addServer() {
+  runOrExit('codex', ['mcp', 'add', serverName, '--', process.execPath, wrapper], {
+    stdio: 'inherit',
+  });
+  console.log(`Registered Codex MCP server '${serverName}' -> ${process.execPath} ${wrapper}`);
+}
+
 const getResult = run('codex', ['mcp', 'get', serverName], {
-  stdio: 'ignore',
+  stdio: 'pipe',
 });
+
 if (getResult.status === 0) {
-  console.log(`Codex MCP server '${serverName}' already exists.`);
-  console.log('');
-  console.log('If it points at an older command, update it manually:');
-  console.log(`  codex mcp remove ${serverName}`);
-  console.log(`  codex mcp add ${serverName} -- ${process.execPath} ${wrapper}`);
+  const current = resultText(getResult);
+  if (serverMatches(current)) {
+    console.log(`Codex MCP server '${serverName}' is already registered correctly.`);
+    process.exit(0);
+  }
+
+  console.log(`Replacing stale Codex MCP server '${serverName}'.`);
+  runOrExit('codex', ['mcp', 'remove', serverName], {
+    stdio: 'inherit',
+  });
+  addServer();
   process.exit(0);
 }
 
-runOrExit('codex', ['mcp', 'add', serverName, '--', process.execPath, wrapper], {
-  stdio: 'inherit',
-});
-console.log(`Registered Codex MCP server '${serverName}' -> ${process.execPath} ${wrapper}`);
+if (getResult.error) {
+  fail(`Could not query Codex MCP server '${serverName}': ${getResult.error.message}`);
+}
+
+addServer();
