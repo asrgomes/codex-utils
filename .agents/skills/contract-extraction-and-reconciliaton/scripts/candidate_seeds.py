@@ -38,6 +38,21 @@ TEXT_EXTENSIONS = {
     ".bats",
     ".sql",
 }
+MANIFEST_NAMES = {
+    "pom.xml",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "build.gradle",
+    "build.gradle.kts",
+    "go.mod",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    "package.json",
+    "tsconfig.json",
+    "pnpm-workspace.yaml",
+}
 REFERENCE_RE = re.compile(r"`([^`:\n]+)(?::(\d+))?`")
 
 
@@ -74,7 +89,7 @@ class DepthReference:
 
 @dataclass(frozen=True)
 class BoundaryReference:
-    source: SourceFile
+    source: SourceFile | None
     start_line: int
     end_line: int
     boundary: dict
@@ -97,6 +112,24 @@ def main() -> int:
     parser.add_argument("--state", help="Optional .contract-state.json path to record the replay seed.")
     parser.add_argument("--write-state", action="store_true", help="Append the generated replay seed to pending state.")
     parser.add_argument(
+        "--mode",
+        choices=("frontier", "balanced"),
+        default="frontier",
+        help="frontier prioritizes uncovered/stale/weak areas; balanced also audits stable covered boundaries.",
+    )
+    parser.add_argument(
+        "--coverage-target",
+        choices=("production-spec", "active", "all"),
+        default="production-spec",
+        help="Boundary roles that must be covered before exhaustive completion.",
+    )
+    parser.add_argument(
+        "--stable-audit-count",
+        type=int,
+        default=1,
+        help="Maximum already-covered stable boundary seeds to include after frontier work.",
+    )
+    parser.add_argument(
         "--refresh-boundaries",
         action="store_true",
         help="Force a fresh boundary inventory instead of reusing unchanged source-anchored entries.",
@@ -111,6 +144,8 @@ def main() -> int:
     repos = [Path(repo).resolve() for repo in args.repo] or [Path.cwd()]
     specs = [Path(spec).resolve() for spec in args.spec]
     contracts_dir = Path(args.contracts).resolve() if args.contracts else None
+    state_path = Path(args.state) if args.state else None
+    state = read_state(state_path) if state_path else {}
 
     breadth_sources = collect_sources(repos, specs)
     boundary_refs = collect_boundary_refs(
@@ -120,6 +155,9 @@ def main() -> int:
         write_inventory=bool(contracts_dir),
         reuse=not args.refresh_boundaries,
     )
+    if contracts_dir:
+        coverage = collect_contract_coverage(contracts_dir)
+        boundary_refs = annotate_boundary_refs(boundary_refs, coverage, state, args.coverage_target)
     depth_refs = collect_depth_refs(contracts_dir, breadth_sources, repos) if contracts_dir else []
     seeds = select_seeds(
         rng,
@@ -129,7 +167,11 @@ def main() -> int:
         max(args.window, 1),
         boundary_refs=boundary_refs,
         random_count=max(args.random_count, 0),
+        mode=args.mode,
+        stable_audit_count=max(args.stable_audit_count, 0),
+        state=state,
     )
+    frontier_summary = summarize_boundary_frontier(boundary_refs)
     payload = {
         "seed": replay_seed,
         "requested_count": max(args.count, 0),
@@ -137,6 +179,9 @@ def main() -> int:
         "boundary_available": bool(boundary_refs),
         "depth_available": bool(depth_refs),
         "random_count": max(args.random_count, 0),
+        "mode": args.mode,
+        "coverage_target": args.coverage_target,
+        "frontier_summary": frontier_summary,
         "seeds": seeds,
     }
     if args.write_state and args.state:
@@ -149,6 +194,21 @@ def record_pending_seed(state_path: Path, replay_seed: str, payload: dict) -> No
     state = read_state(state_path)
     pending = unique_strings(list_value(state.get("pending_replay_seeds")) + [replay_seed])
     state["pending_replay_seeds"] = pending
+    boundary_counts = {
+        str(key): int(value)
+        for key, value in dict_value(state.get("boundary_seed_counts")).items()
+        if str(key)
+    }
+    selected_boundary_ids = []
+    for seed in payload.get("seeds", []):
+        if not isinstance(seed, dict):
+            continue
+        boundary_id = str(seed.get("boundary_id", ""))
+        if not boundary_id:
+            continue
+        selected_boundary_ids.append(boundary_id)
+        boundary_counts[boundary_id] = boundary_counts.get(boundary_id, 0) + 1
+    state["boundary_seed_counts"] = boundary_counts
     seed_history = list_value(state.get("seed_history"))
     seed_history.append(
         {
@@ -158,9 +218,23 @@ def record_pending_seed(state_path: Path, replay_seed: str, payload: dict) -> No
             "boundary_available": payload["boundary_available"],
             "depth_available": payload["depth_available"],
             "random_count": payload["random_count"],
+            "mode": payload.get("mode"),
+            "coverage_target": payload.get("coverage_target"),
+            "selected_boundary_ids": selected_boundary_ids,
+            "frontier_summary": payload.get("frontier_summary", {}),
         }
     )
     state["seed_history"] = seed_history
+    frontier_seed_history = list_value(state.get("frontier_seed_history"))
+    frontier_seed_history.append(
+        {
+            "seed": replay_seed,
+            "selected_boundary_ids": selected_boundary_ids,
+            "frontier_summary": payload.get("frontier_summary", {}),
+        }
+    )
+    state["frontier_seed_history"] = frontier_seed_history
+    state["last_seed_frontier"] = payload.get("frontier_summary", {})
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -189,6 +263,10 @@ def list_value(value) -> list:
     if isinstance(value, list):
         return value
     return [value]
+
+
+def dict_value(value) -> dict:
+    return value if isinstance(value, dict) else {}
 
 
 def collect_sources(repos: list[Path], specs: list[Path]) -> list[SourceFile]:
@@ -231,7 +309,7 @@ def git_ls_files(root: Path) -> list[Path]:
 def include_path(path: Path) -> bool:
     if any(part in SKIP_PARTS for part in path.parts):
         return False
-    return path.suffix in TEXT_EXTENSIONS or path.name in {"pom.xml", "go.mod", "README", "Makefile"}
+    return path.suffix in TEXT_EXTENSIONS or path.name in MANIFEST_NAMES or path.name in {"README", "Makefile"}
 
 
 def source_file(root: Path, path: Path, *, use_root_prefix: bool = False) -> SourceFile:
@@ -307,10 +385,8 @@ def collect_boundary_refs(
     by_rel = {label_without_root(source.label): source for source in breadth_sources}
     refs: list[BoundaryReference] = []
     for boundary in inventory.get("boundaries", []):
-        if boundary.get("status", "active") != "active":
-            continue
         source = by_label.get(str(boundary.get("path", ""))) or by_rel.get(str(boundary.get("repo_relative_path", "")))
-        if source is None:
+        if source is None and boundary.get("status", "active") == "active":
             continue
         line_range = boundary.get("line_range", [1, 1])
         try:
@@ -322,10 +398,11 @@ def collect_boundary_refs(
     return sorted(
         refs,
         key=lambda ref: (
+            0 if ref.boundary.get("status", "active") != "active" else 1,
             evidence_role_rank(str(ref.boundary.get("evidence_role", ""))),
             -float(ref.boundary.get("confidence", 0)),
             str(ref.boundary.get("boundary_type", "")),
-            ref.source.label,
+            ref.source.label if ref.source else str(ref.boundary.get("path", "")),
         ),
     )
 
@@ -344,14 +421,190 @@ def evidence_role_rank(role: str) -> int:
     }.get(role, 4)
 
 
+def collect_contract_coverage(contracts_dir: Path) -> list[dict]:
+    """Collect lightweight evidence fingerprints from existing contracts."""
+    if not contracts_dir.exists():
+        return []
+    coverages: list[dict] = []
+    for path in sorted(contracts_dir.glob("*.md")):
+        if path.name in {"INDEX.md", "COVERAGE.md"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        refs = []
+        for ref_text, line_text in REFERENCE_RE.findall(text):
+            line = int(line_text) if line_text else None
+            refs.append({"path": ref_text.strip(), "line": line})
+        coverages.append(
+            {
+                "contract": path.stem,
+                "boundary_ids": set(re.findall(r"\bboundary-[0-9a-f]{8,}\b", text)),
+                "hashes": set(re.findall(r"\b[a-f0-9]{64}\b", text.lower())),
+                "refs": refs,
+            }
+        )
+    return coverages
+
+
+def annotate_boundary_refs(
+    refs: list[BoundaryReference],
+    contract_coverage: list[dict],
+    state: dict,
+    coverage_target: str,
+) -> list[BoundaryReference]:
+    counts = {
+        str(key): int(value)
+        for key, value in dict_value(state.get("boundary_seed_counts")).items()
+        if str(key)
+    }
+    annotated: list[BoundaryReference] = []
+    for ref in refs:
+        boundary = dict(ref.boundary)
+        covered_by = covered_by_contracts(
+            boundary,
+            contract_coverage,
+            allow_path_line=boundary.get("status", "active") == "active",
+        )
+        boundary_id = str(boundary.get("boundary_id", ""))
+        boundary["covered_by"] = covered_by
+        boundary["sample_count"] = counts.get(boundary_id, 0)
+        required = required_for_completion(boundary, coverage_target)
+        boundary["required_for_completion"] = required
+        frontier_kind, priority = boundary_frontier_kind(boundary, covered=bool(covered_by), required=required)
+        boundary["frontier_kind"] = frontier_kind
+        boundary["priority_score"] = priority
+        annotated.append(
+            BoundaryReference(
+                source=ref.source,
+                start_line=ref.start_line,
+                end_line=ref.end_line,
+                boundary=boundary,
+            )
+        )
+    return annotated
+
+
+def covered_by_contracts(boundary: dict, contract_coverage: list[dict], *, allow_path_line: bool = True) -> list[str]:
+    boundary_id = str(boundary.get("boundary_id", ""))
+    snippet_hash = str(boundary.get("snippet_hash", ""))
+    boundary_paths = {
+        str(boundary.get("path", "")),
+        str(boundary.get("repo_relative_path", "")),
+        label_without_root(str(boundary.get("path", ""))),
+    }
+    boundary_paths = {path for path in boundary_paths if path}
+    line_range = boundary.get("line_range", [1, 1])
+    try:
+        start_line = int(line_range[0])
+        end_line = int(line_range[1])
+    except (TypeError, ValueError, IndexError):
+        start_line, end_line = 1, 1
+    covered: list[str] = []
+    for item in contract_coverage:
+        if boundary_id and boundary_id in item.get("boundary_ids", set()):
+            covered.append(str(item["contract"]))
+            continue
+        if snippet_hash and snippet_hash in item.get("hashes", set()):
+            covered.append(str(item["contract"]))
+            continue
+        if not allow_path_line:
+            continue
+        for ref in item.get("refs", []):
+            ref_path = str(ref.get("path", ""))
+            if not path_matches(ref_path, boundary_paths):
+                continue
+            ref_line = ref.get("line")
+            if ref_line is None or lines_overlap(int(ref_line), int(ref_line), start_line, end_line, tolerance=3):
+                covered.append(str(item["contract"]))
+                break
+    return unique_strings(covered)
+
+
+def path_matches(ref_path: str, candidates: set[str]) -> bool:
+    normalized = ref_path.strip()
+    if normalized in candidates:
+        return True
+    normalized_tail = label_without_root(normalized)
+    if normalized_tail in candidates:
+        return True
+    return any(candidate.endswith("/" + normalized) or normalized.endswith("/" + candidate) for candidate in candidates)
+
+
+def lines_overlap(left_start: int, left_end: int, right_start: int, right_end: int, *, tolerance: int = 0) -> bool:
+    return left_start <= right_end + tolerance and right_start <= left_end + tolerance
+
+
+def required_for_completion(boundary: dict, coverage_target: str) -> bool:
+    if coverage_target == "all":
+        return boundary.get("status", "active") == "active"
+    if boundary.get("status", "active") != "active":
+        return False
+    if coverage_target == "active":
+        return True
+    return boundary.get("evidence_role") in {"production_anchor", "spec_anchor"}
+
+
+def boundary_frontier_kind(boundary: dict, *, covered: bool, required: bool) -> tuple[str, float]:
+    status = boundary.get("status", "active")
+    role = str(boundary.get("evidence_role", ""))
+    confidence = float(boundary.get("confidence", 0))
+    sample_count = int(boundary.get("sample_count", 0))
+    if status != "active":
+        return "stale-boundary", 1000.0 - sample_count
+    if required and not covered:
+        return "uncovered-required-boundary", 900.0 + confidence - sample_count
+    if not covered and role in {"production_anchor", "spec_anchor"}:
+        return "uncovered-production-or-spec-boundary", 750.0 + confidence - sample_count
+    if not covered:
+        return "uncovered-test-or-support-signal", 500.0 + confidence - sample_count
+    return "stable-audit", 50.0 + confidence - sample_count
+
+
+def summarize_boundary_frontier(refs: list[BoundaryReference]) -> dict:
+    summary = {
+        "total": len(refs),
+        "required": 0,
+        "covered_required": 0,
+        "uncovered_required": 0,
+        "stale": 0,
+        "frontier_by_kind": {},
+    }
+    by_kind: dict[str, int] = {}
+    for ref in refs:
+        boundary = ref.boundary
+        kind = str(boundary.get("frontier_kind", "unknown"))
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        if boundary.get("status", "active") != "active":
+            summary["stale"] += 1
+        if boundary.get("required_for_completion"):
+            summary["required"] += 1
+            if boundary.get("covered_by"):
+                summary["covered_required"] += 1
+            else:
+                summary["uncovered_required"] += 1
+    summary["frontier_by_kind"] = by_kind
+    return summary
+
+
 def coverage_gap_refs(contracts_dir: Path, path: Path, text: str) -> list[DepthReference]:
     gap_source = source_file(contracts_dir, path)
     refs: list[DepthReference] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
-        lowered = line.lower()
-        if any(word in lowered for word in ("gap", "missing", "uncovered", "unknown", "todo")):
+        if is_unresolved_gap_line(line):
             refs.append(DepthReference(source=gap_source, line=line_number, reason="known coverage gap in COVERAGE.md"))
     return refs
+
+
+def is_unresolved_gap_line(line: str) -> bool:
+    stripped = line.strip()
+    lowered = stripped.lower()
+    if not stripped or stripped.startswith("#") or "[x]" in lowered:
+        return False
+    return (
+        "[ ]" in lowered
+        or bool(re.match(r"^[-*]\s+(gap|missing|uncovered|unknown|todo)\b", lowered))
+        or "todo" in lowered
+        or "fixme" in lowered
+    )
 
 
 def resolve_source(ref_text: str, by_label: dict[str, SourceFile], repos: list[Path]) -> SourceFile | None:
@@ -383,6 +636,9 @@ def select_seeds(
     window: int,
     boundary_refs: list[BoundaryReference] | None = None,
     random_count: int = 0,
+    mode: str = "frontier",
+    stable_audit_count: int = 1,
+    state: dict | None = None,
 ) -> list[dict]:
     if count <= 0:
         return []
@@ -390,14 +646,15 @@ def select_seeds(
     boundary_refs = boundary_refs or []
     gap_refs = [ref for ref in depth_refs if ref.reason.startswith("known coverage gap")]
     remaining_count = count
-    if gap_refs:
-        seeds.append(depth_seed(rng, rng.choice(gap_refs), window))
+    gap_budget = min(len(gap_refs), remaining_count, max(1, count // 4) if gap_refs else 0)
+    for ref in selected_depth_refs(rng, gap_refs, gap_budget):
+        seeds.append(depth_seed(rng, ref, window))
         remaining_count -= 1
-    for ref in selected_boundary_refs(rng, boundary_refs, remaining_count):
+    for ref in selected_boundary_refs(rng, boundary_refs, remaining_count, mode=mode, stable_audit_count=stable_audit_count):
         seeds.append(boundary_seed(ref))
         remaining_count -= 1
     depth_only_refs = [ref for ref in depth_refs if not ref.reason.startswith("known coverage gap")]
-    for ref in selected_depth_refs(rng, depth_only_refs, remaining_count):
+    for ref in selected_depth_refs(rng, depth_only_refs, remaining_count, preferred_ids=quality_contract_ids(state or {})):
         seeds.append(depth_seed(rng, ref, window))
         remaining_count -= 1
     explicit_random_count = min(max(random_count, 0), max(remaining_count, 0))
@@ -409,32 +666,79 @@ def select_seeds(
     return seeds
 
 
-def selected_boundary_refs(rng: random.Random, boundary_refs: list[BoundaryReference], count: int) -> list[BoundaryReference]:
+def selected_boundary_refs(
+    rng: random.Random,
+    boundary_refs: list[BoundaryReference],
+    count: int,
+    *,
+    mode: str,
+    stable_audit_count: int,
+) -> list[BoundaryReference]:
     if count <= 0 or not boundary_refs:
         return []
-    production = [ref for ref in boundary_refs if ref.boundary.get("evidence_role") in {"production_anchor", "spec_anchor"}]
-    support = [ref for ref in boundary_refs if ref.boundary.get("evidence_role") not in {"production_anchor", "spec_anchor"}]
-    selected = weighted_sample(rng, production, min(count, len(production)))
+    frontier = [ref for ref in boundary_refs if ref.boundary.get("frontier_kind") != "stable-audit"]
+    stable = [ref for ref in boundary_refs if ref.boundary.get("frontier_kind") == "stable-audit"]
+    if not frontier and not any("frontier_kind" in ref.boundary for ref in boundary_refs):
+        frontier = [ref for ref in boundary_refs if ref.boundary.get("evidence_role") in {"production_anchor", "spec_anchor"}]
+        stable = [ref for ref in boundary_refs if ref.boundary.get("evidence_role") not in {"production_anchor", "spec_anchor"}]
+    selected = ranked_boundary_sample(rng, frontier, min(count, len(frontier)))
     remaining = count - len(selected)
-    if remaining > 0:
-        selected.extend(weighted_sample(rng, support, min(remaining, len(support))))
+    audit_budget = stable_audit_count if mode == "frontier" else max(stable_audit_count, remaining)
+    if remaining > 0 and stable and audit_budget > 0:
+        selected.extend(ranked_boundary_sample(rng, stable, min(remaining, audit_budget, len(stable))))
     return selected
 
 
-def selected_depth_refs(rng: random.Random, depth_refs: list[DepthReference], count: int) -> list[DepthReference]:
+def selected_depth_refs(
+    rng: random.Random,
+    depth_refs: list[DepthReference],
+    count: int,
+    *,
+    preferred_ids: set[str] | None = None,
+) -> list[DepthReference]:
     if count <= 0 or not depth_refs:
         return []
     shuffled = list(depth_refs)
     rng.shuffle(shuffled)
+    if preferred_ids:
+        shuffled.sort(key=lambda ref: 0 if any(identifier in ref.reason for identifier in preferred_ids) else 1)
     return shuffled[:count]
 
 
-def weighted_sample(rng: random.Random, refs: list, count: int) -> list:
+def quality_contract_ids(state: dict) -> set[str]:
+    frontier = dict_value(state.get("frontier"))
+    quality = dict_value(frontier.get("quality_frontier"))
+    ids: set[str] = set()
+    for key in ("contracts_below_min_score", "actor_behavior_gaps", "split_candidates", "drop_candidates"):
+        for item in list_value(quality.get(key)):
+            if isinstance(item, dict):
+                value = item.get("id")
+                if value:
+                    ids.add(str(value))
+    for item in list_value(quality.get("merge_candidates")):
+        if isinstance(item, dict):
+            for key in ("left", "right"):
+                value = item.get(key)
+                if value:
+                    ids.add(str(value))
+    return ids
+
+
+def ranked_boundary_sample(rng: random.Random, refs: list[BoundaryReference], count: int) -> list[BoundaryReference]:
     if count <= 0 or not refs:
         return []
     pool = list(refs)
     rng.shuffle(pool)
-    pool.sort(key=lambda ref: -float(ref.boundary.get("confidence", 0)) if hasattr(ref, "boundary") else 0)
+    pool.sort(
+        key=lambda ref: (
+            -float(ref.boundary.get("priority_score", ref.boundary.get("confidence", 0))),
+            int(ref.boundary.get("sample_count", 0)),
+            evidence_role_rank(str(ref.boundary.get("evidence_role", ""))),
+            -float(ref.boundary.get("confidence", 0)),
+            ref.source.label if ref.source else str(ref.boundary.get("path", "")),
+            str(ref.boundary.get("boundary_id", "")),
+        )
+    )
     return pool[:count]
 
 
@@ -469,13 +773,23 @@ def depth_seed(rng: random.Random, ref: DepthReference, window: int) -> dict:
 
 
 def boundary_seed(ref: BoundaryReference) -> dict:
-    payload = seed_payload(
-        strategy="boundary",
-        source=ref.source,
-        start=ref.start_line,
-        end=ref.end_line,
-        reason=str(ref.boundary.get("reason", "source-anchored boundary inventory match")),
-    )
+    if ref.source is None:
+        payload = {
+            "strategy": "boundary",
+            "path": str(ref.boundary.get("path", "")),
+            "kind": "stale",
+            "start_line": ref.start_line,
+            "end_line": ref.end_line,
+            "reason": str(ref.boundary.get("stale_reason", ref.boundary.get("reason", "stale boundary inventory match"))),
+        }
+    else:
+        payload = seed_payload(
+            strategy="boundary",
+            source=ref.source,
+            start=ref.start_line,
+            end=ref.end_line,
+            reason=str(ref.boundary.get("reason", "source-anchored boundary inventory match")),
+        )
     for key in (
         "boundary_id",
         "boundary_type",
@@ -487,6 +801,13 @@ def boundary_seed(ref: BoundaryReference) -> dict:
         "source_hash",
         "snippet_hash",
         "project_profile_id",
+        "status",
+        "stale_reason",
+        "covered_by",
+        "required_for_completion",
+        "frontier_kind",
+        "priority_score",
+        "sample_count",
     ):
         if key in ref.boundary:
             payload[key] = ref.boundary[key]

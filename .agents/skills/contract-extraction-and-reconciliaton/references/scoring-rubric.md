@@ -40,6 +40,12 @@ code paths that hit the point by tracing inbound callers, outbound callees, or b
 boundaries that explain the value-delivering path; record untraced caller/callee branches or
 ambiguous caller/callee branches as rejected candidates or coverage gaps.
 
+In later phases, use the coverage frontier rather than broad rediscovery. Prioritize referenced
+stale boundaries, uncovered required production/spec boundaries, unresolved coverage gaps, weak or
+conflicted existing contracts, optional test/support signals, then small stable audits. Stable
+covered contracts should receive only minor evidence, relationship, or wording adjustments unless
+source evidence changes or a conflict proves the contract identity is wrong.
+
 Treat tests and support code as interaction signals. They can reveal negative paths, fixtures,
 expected outcomes, and validation oracles, but the candidate should be anchored to production source
 or local specs unless the contract is specifically about test infrastructure.
@@ -65,8 +71,12 @@ area in `COVERAGE.md` as a missing-contract guideline instead of silently deleti
 
 ## Stop Guidance
 
-The long-running loop requires a user-specified `max_iterations`. Stop only when that iteration is
-reached. Do not stop early just because ranks stop changing. Record iteration number, replay seeds,
-sampled seeds, candidates drafted, contracts added or changed, candidates rejected, coverage gaps
-harvested, rank history, drop decisions, and stop reason in `.contract-state.json` or companion
+Use the configured stop policy. `iteration` requires a user-specified `max_iterations` and stops only
+when that count is reached. `exhaustive` does not require `max_iterations`; it stops only when the
+coverage frontier is complete: all required active boundaries for the coverage target are covered,
+no referenced stale boundaries remain, every retained contract meets `completion_min_score`, no
+actor-behavior gaps remain, no merge/split/drop candidates remain, and no unresolved `COVERAGE.md`
+gap lines remain. `both` stops when either policy succeeds. Do not stop early just because ranks
+stop changing. Record iteration number, replay seeds, sampled seeds, candidate outcomes, frontier
+blockers, rank history, drop decisions, and stop reason in `.contract-state.json` or companion
 iteration artifacts.

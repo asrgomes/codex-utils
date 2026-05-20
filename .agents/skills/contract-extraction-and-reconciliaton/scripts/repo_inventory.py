@@ -36,6 +36,21 @@ TEXT_EXTENSIONS = {
     ".bats",
     ".sql",
 }
+MANIFEST_NAMES = {
+    "pom.xml",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "build.gradle",
+    "build.gradle.kts",
+    "go.mod",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    "package.json",
+    "tsconfig.json",
+    "pnpm-workspace.yaml",
+}
 
 
 def load_boundary_inventory_module():
@@ -146,7 +161,7 @@ def git_ls_files(root: Path) -> list[Path]:
 def include_path(path: Path) -> bool:
     if any(part in SKIP_PARTS for part in path.parts):
         return False
-    return path.suffix in TEXT_EXTENSIONS or path.name in {"pom.xml", "go.mod", "README", "Makefile"}
+    return path.suffix in TEXT_EXTENSIONS or path.name in MANIFEST_NAMES or path.name in {"README", "Makefile"}
 
 
 def file_record(root: Path, path: Path) -> FileRecord:

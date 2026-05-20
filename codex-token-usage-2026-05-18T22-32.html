@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex Token Usage</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0f141b;
+  --panel: #171d26;
+  --panel-2: #111821;
+  --text: #f3f6fb;
+  --muted: #a6b0bf;
+  --line: #2a3442;
+  --accent: #42c6b5;
+  --accent-2: #f0b65a;
+  --danger: #ff7a7a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+header { padding: 24px 28px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }
+h2 { margin: 0 0 12px; font-size: 17px; letter-spacing: 0; }
+p { margin: 0; color: var(--muted); }
+.params { margin-top: 14px; }
+.params h2 { margin-bottom: 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; }
+.params dl { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.params div { border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; background: var(--panel-2); }
+.params dt { margin: 0 0 2px; color: var(--muted); font-size: 11px; }
+.params dd { margin: 0; color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+main { max-width: 1420px; margin: 0 auto; padding: 20px 24px 36px; display: grid; gap: 18px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.grid { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 12px; }
+.kpi { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--panel-2); min-height: 86px; }
+.kpi span { display: block; color: var(--muted); font-size: 12px; }
+.kpi strong { display: block; margin-top: 8px; font-size: 22px; overflow-wrap: anywhere; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button { font: inherit; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); padding: 8px 10px; }
+button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #07110f; }
+button.secondary { background: var(--panel-2); color: var(--accent); }
+.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 860px; }
+th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+th { background: #1f2937; font-size: 12px; color: #d7dee9; position: sticky; top: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: #1b2633; }
+.chart-shell { position: relative; height: 320px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 10px; }
+canvas { display: block; width: 100% !important; height: 100% !important; }
+.diag-warning { color: var(--danger); }
+.diag-info { color: var(--muted); }
+.muted { color: var(--muted); }
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(3, minmax(130px, 1fr)); } }
+@media (max-width: 700px) { .grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); } main { padding: 14px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Codex Token Usage</h1>
+  <p id="summaryLine"></p>
+  <div class="params" aria-label="Report Parameters">
+    <h2>Report Parameters</h2>
+    <dl id="reportParams"></dl>
+  </div>
+</header>
+<main>
+  <section aria-label="KPI Cards">
+    <h2>KPI Cards</h2>
+    <div class="grid" id="kpis"></div>
+  </section>
+  <section aria-label="Cost Estimate">
+    <h2>Cost Estimate</h2>
+    <p class="muted" id="costSummary"></p>
+    <div class="table-wrap"><table aria-label="Estimated cost by model">
+      <thead><tr><th>Model</th><th class="num">Estimated USD</th><th class="num">Tokens</th><th class="num">Input $/1M</th><th class="num">Cached $/1M</th><th class="num">Output $/1M</th><th class="num">Long ctx events</th></tr></thead>
+      <tbody id="costRows"></tbody>
+    </table></div>
+  </section>
+  <section aria-label="Token Chart">
+    <h2>Token Chart</h2>
+    <div class="chart-shell"><canvas id="tokenChart"></canvas></div>
+  </section>
+  <section aria-label="Period Breakdown">
+    <h2>Period Breakdown</h2>
+    <div class="controls">
+      <button id="exportCsv">Export CSV</button>
+      <button id="exportJson" class="secondary">Export JSON</button>
+    </div>
+    <p class="muted" id="bucketLine"></p>
+    <div class="table-wrap"><table aria-label="Token usage by period bucket">
+      <thead><tr><th>Start</th><th>End</th><th class="num">Estimated USD</th><th class="num">Total</th><th class="num">Input</th><th class="num">Cached</th><th class="num">Output</th><th class="num">Reasoning</th><th class="num">Events</th><th class="num">Long ctx</th><th class="num">Active threads</th><th class="num">Unpriced</th></tr></thead>
+      <tbody id="periodRows"></tbody>
+    </table></div>
+  </section>
+  <section aria-label="Diagnostics">
+    <h2>Diagnostics</h2>
+    <ul id="diagnostics"></ul>
+  </section>
+</main>
+<script id="usage-data" type="application/json">{"costEstimate":{"byModel":[],"estimatedCostUsd":0,"longContextEvents":0,"longContextThresholdTokens":272000,"longContextTokens":0,"pricedTokens":0,"pricingSource":"OpenAI standard API token rates","pricingUpdated":"2026-05-16","unpricedModels":[{"model":"oca/gpt-5.4-mini","total_tokens":27302582},{"model":"oca/gpt-5.5-pro","total_tokens":24579087},{"model":"oca/gpt-5.5","total_tokens":16782673},{"model":"oca/gpt-5.1-codex","total_tokens":522162}],"unpricedTokens":69186504},"diagnostics":[{"count":23,"level":"warning","message":"token_count events had no usage payload"},{"count":842,"level":"info","message":"duplicate zero-delta token events were ignored"}],"metadata":{"bucketSeconds":86400,"bucketSize":"1 day","codexHome":"/home/antonio/.codex-oca","eventCount":840,"generatedAt":"2026-05-18T22:32:22.269501-03:00","noBrowser":false,"outputPath":"/home/antonio/private/codex-utils/codex-token-usage-2026-05-18T22-32.html","periodEnd":"2026-05-18T22:32:22.269501-03:00","redacted":false,"sessionsRoot":"/home/antonio/.codex-oca/sessions","since":"2026-04-18T22:32:22.269501-03:00","sinceOption":"30d","stateDbPresent":true,"timezone":"-03"},"periodBreakdown":[{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-19T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-18T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-20T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-19T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-21T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-20T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-22T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-21T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-23T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-22T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-24T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-23T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-25T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-24T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-26T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-25T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-27T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-26T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-28T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-27T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-29T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-28T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-04-30T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-29T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-01T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-04-30T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-02T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-01T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-03T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-02T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-04T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-03T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-05T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-04T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-06T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-05T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-07T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-06T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-08T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-07T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-09T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-08T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-10T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-09T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-11T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-10T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-12T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-11T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-13T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-12T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-14T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-13T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-15T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-14T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":14,"bucket":"1 day","cached_input_tokens":34055296,"end":"2026-05-16T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":634,"input_tokens":54271378,"long_context_events":0,"long_context_tokens":0,"output_tokens":392984,"reasoning_output_tokens":181497,"start":"2026-05-15T00:00:00-03:00","total_tokens":54664362,"unpriced_tokens":54664362},{"active_threads":3,"bucket":"1 day","cached_input_tokens":7764864,"end":"2026-05-17T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":172,"input_tokens":12005830,"long_context_events":0,"long_context_tokens":0,"output_tokens":162580,"reasoning_output_tokens":108962,"start":"2026-05-16T00:00:00-03:00","total_tokens":12168410,"unpriced_tokens":12168410},{"active_threads":0,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-18T00:00:00-03:00","estimated_cost_usd":0.0,"event_count":0,"input_tokens":0,"long_context_events":0,"long_context_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"start":"2026-05-17T00:00:00-03:00","total_tokens":0,"unpriced_tokens":0},{"active_threads":1,"bucket":"1 day","cached_input_tokens":0,"end":"2026-05-18T22:32:22.269501-03:00","estimated_cost_usd":0.0,"event_count":34,"input_tokens":2321513,"long_context_events":0,"long_context_tokens":0,"output_tokens":32219,"reasoning_output_tokens":11568,"start":"2026-05-18T00:00:00-03:00","total_tokens":2353732,"unpriced_tokens":2353732}],"totals":{"cached_input_tokens":41820160,"input_tokens":68598721,"output_tokens":587783,"reasoning_output_tokens":302027,"total_tokens":69186504}}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+<script>
+const DATA = JSON.parse(document.getElementById('usage-data').textContent);
+const TOKEN_KEYS = ['total_tokens', 'input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_output_tokens'];
+const fmt = new Intl.NumberFormat();
+const usdFmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dateTimeFmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+const chartDateTimeFmt = new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+const chartDateFmt = new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric' });
+function text(value) { return value == null ? '' : String(value); }
+function number(value) { return Number(value || 0); }
+function cell(value, className) {
+  const td = document.createElement('td');
+  td.textContent = text(value);
+  if (className) td.className = className;
+  return td;
+}
+function download(name, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+function csvEscape(value) {
+  const s = text(value);
+  return /[",\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s;
+}
+function bucketLabel(value) {
+  const raw = text(value);
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw : dateTimeFmt.format(date);
+}
+function chartLabel(value) {
+  const raw = text(value);
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  if (number(DATA.metadata.bucketSeconds) >= 24 * 60 * 60) return chartDateFmt.format(date);
+  return chartDateTimeFmt.format(date);
+}
+function kpiValue(value) {
+  return typeof value === 'number' ? fmt.format(value) : text(value);
+}
+function usd(value) { return usdFmt.format(number(value)); }
+function usdNumber(value) { return number(value).toFixed(2); }
+function peakBucket() {
+  return (DATA.periodBreakdown || []).reduce((best, row) => number(row.total_tokens) > number(best.total_tokens) ? row : best, { total_tokens: 0 });
+}
+function renderKpis() {
+  const kpis = document.getElementById('kpis');
+  kpis.replaceChildren();
+  const buckets = DATA.periodBreakdown || [];
+  const cost = DATA.costEstimate || {};
+  const usedBuckets = buckets.filter(row => number(row.total_tokens) > 0).length;
+  const peak = peakBucket();
+  const cards = [
+    [number(cost.unpricedTokens) > 0 ? 'USD estimate (priced only)' : 'USD estimate', usd(cost.estimatedCostUsd)],
+    ['Period total', DATA.totals.total_tokens],
+    ['Input tokens', DATA.totals.input_tokens],
+    ['Cached input', DATA.totals.cached_input_tokens],
+    ['Output tokens', DATA.totals.output_tokens],
+    ['Reasoning output', DATA.totals.reasoning_output_tokens],
+    ['Unpriced tokens', number(cost.unpricedTokens)],
+    ['Buckets with usage', usedBuckets + ' / ' + buckets.length],
+    ['Peak bucket', number(peak.total_tokens)],
+  ];
+  for (const [label, value] of cards) {
+    const div = document.createElement('div');
+    div.className = 'kpi';
+    const span = document.createElement('span');
+    span.textContent = label;
+    const strong = document.createElement('strong');
+    strong.textContent = kpiValue(value);
+    div.append(span, strong);
+    kpis.appendChild(div);
+  }
+}
+function renderReportParams() {
+  const params = document.getElementById('reportParams');
+  params.replaceChildren();
+  const rows = [
+    ['Since', DATA.metadata.sinceOption || '30d'],
+    ['Period start', DATA.metadata.since],
+    ['Period end', DATA.metadata.periodEnd],
+    ['Timezone', DATA.metadata.timezone],
+    ['Bucket size', DATA.metadata.bucketSize],
+    ['Pricing', ((DATA.costEstimate || {}).pricingSource || '') + ((DATA.costEstimate || {}).pricingUpdated ? ' checked ' + (DATA.costEstimate || {}).pricingUpdated : '')],
+    ['Codex home', DATA.metadata.codexHome],
+    ['Sessions root', DATA.metadata.sessionsRoot],
+    ['Output', DATA.metadata.outputPath],
+    ['Data source', DATA.metadata.stateDbPresent ? 'state_5.sqlite plus rollouts' : 'rollout JSONLs'],
+    ['Redacted', DATA.metadata.redacted ? 'yes' : 'no'],
+  ];
+  for (const [label, value] of rows) {
+    if (value === undefined || value === null || value === '') continue;
+    const wrapper = document.createElement('div');
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = text(value);
+    wrapper.append(dt, dd);
+    params.appendChild(wrapper);
+  }
+}
+function renderCostEstimate() {
+  const cost = DATA.costEstimate || {};
+  const priced = number(cost.pricedTokens);
+  const unpriced = number(cost.unpricedTokens);
+  const longCtxEvents = number(cost.longContextEvents);
+  const pricedOnly = unpriced > 0 ? ' USD estimate is for priced tokens only.' : '';
+  document.getElementById('costSummary').textContent =
+    'Estimated with ' + text(cost.pricingSource || 'embedded token rates') +
+    '. Priced tokens: ' + fmt.format(priced) + '. Unpriced tokens: ' + fmt.format(unpriced) + '.' +
+    pricedOnly + ' Long-context events: ' + fmt.format(longCtxEvents) + '. ' +
+    'Excludes plan credits, taxes, batch/priority multipliers, regional surcharges, and non-token tool charges.';
+  const body = document.getElementById('costRows');
+  body.replaceChildren();
+  for (const row of cost.byModel || []) {
+    const tr = document.createElement('tr');
+    tr.append(
+      cell(row.model),
+      cell(usd(row.estimated_cost_usd), 'num'),
+      cell(fmt.format(number(row.total_tokens)), 'num'),
+      cell(usd(row.input_usd_per_million), 'num'),
+      cell(usd(row.cached_input_usd_per_million), 'num'),
+      cell(usd(row.output_usd_per_million), 'num'),
+      cell(fmt.format(number(row.long_context_events)), 'num')
+    );
+    body.appendChild(tr);
+  }
+  for (const row of cost.unpricedModels || []) {
+    const tr = document.createElement('tr');
+    tr.append(
+      cell(row.model || 'unknown'),
+      cell('unpriced', 'num'),
+      cell(fmt.format(number(row.total_tokens)), 'num'),
+      cell('', 'num'),
+      cell('', 'num'),
+      cell('', 'num'),
+      cell('', 'num')
+    );
+    body.appendChild(tr);
+  }
+  if (!body.children.length) {
+    const tr = document.createElement('tr');
+    const td = cell('No priced token usage in this period.');
+    td.colSpan = 7;
+    tr.appendChild(td);
+    body.appendChild(tr);
+  }
+}
+function renderPeriodRows() {
+  const body = document.getElementById('periodRows');
+  body.replaceChildren();
+  for (const row of DATA.periodBreakdown || []) {
+    const tr = document.createElement('tr');
+    tr.append(
+      cell(bucketLabel(row.start)),
+      cell(bucketLabel(row.end)),
+      cell(usd(row.estimated_cost_usd), 'num'),
+      cell(fmt.format(number(row.total_tokens)), 'num'),
+      cell(fmt.format(number(row.input_tokens)), 'num'),
+      cell(fmt.format(number(row.cached_input_tokens)), 'num'),
+      cell(fmt.format(number(row.output_tokens)), 'num'),
+      cell(fmt.format(number(row.reasoning_output_tokens)), 'num'),
+      cell(fmt.format(number(row.event_count)), 'num'),
+      cell(fmt.format(number(row.long_context_events)), 'num'),
+      cell(fmt.format(number(row.active_threads)), 'num'),
+      cell(fmt.format(number(row.unpriced_tokens)), 'num')
+    );
+    body.appendChild(tr);
+  }
+  document.getElementById('bucketLine').textContent = 'Bucket size: ' + text(DATA.metadata.bucketSize || '') + '. Events counted: ' + fmt.format(number(DATA.metadata.eventCount)) + '.';
+}
+function renderDiagnostics() {
+  const list = document.getElementById('diagnostics');
+  list.replaceChildren();
+  const diagnostics = DATA.diagnostics && DATA.diagnostics.length ? DATA.diagnostics : [{ level: 'info', message: 'No diagnostics.' }];
+  for (const diag of diagnostics) {
+    const li = document.createElement('li');
+    li.className = diag.level === 'warning' ? 'diag-warning' : 'diag-info';
+    li.textContent = diag.count ? fmt.format(number(diag.count)) + ' - ' + diag.message : diag.message;
+    list.appendChild(li);
+  }
+}
+function renderChart() {
+  const canvas = document.getElementById('tokenChart');
+  const rows = DATA.periodBreakdown || [];
+  if (!window.Chart) {
+    canvas.replaceWith(document.createTextNode('Chart.js did not load from the CDN.'));
+    return;
+  }
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: rows.map(row => chartLabel(row.start)),
+      datasets: [
+        {
+          label: 'Total tokens',
+          data: rows.map(row => number(row.total_tokens)),
+          backgroundColor: '#42c6b5',
+          borderColor: '#7de1d4',
+          borderWidth: 1,
+          maxBarThickness: 34,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterBody(items) {
+              const row = rows[(items[0] || {}).dataIndex] || {};
+              return [
+                'Input: ' + fmt.format(number(row.input_tokens)),
+                'Cached input: ' + fmt.format(number(row.cached_input_tokens)),
+                'Output: ' + fmt.format(number(row.output_tokens)),
+                'Reasoning output: ' + fmt.format(number(row.reasoning_output_tokens)),
+                'Estimated USD: ' + usd(row.estimated_cost_usd),
+                'Events: ' + fmt.format(number(row.event_count)),
+                'Active threads: ' + fmt.format(number(row.active_threads)),
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 12, color: '#a6b0bf' },
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: '#263241' },
+          ticks: { color: '#a6b0bf', callback: value => fmt.format(value) },
+        },
+      },
+    },
+  });
+}
+function setupExports() {
+  document.getElementById('exportJson').addEventListener('click', () => download('codex-token-usage.json', JSON.stringify(DATA, null, 2), 'application/json'));
+  document.getElementById('exportCsv').addEventListener('click', () => {
+    const header = ['start','end','bucket','estimated_cost_usd','total_tokens','input_tokens','cached_input_tokens','output_tokens','reasoning_output_tokens','event_count','long_context_events','active_threads','unpriced_tokens'];
+    const lines = [header.join(',')];
+    for (const row of DATA.periodBreakdown || []) {
+      lines.push(header.map(key => csvEscape(key === 'estimated_cost_usd' ? usdNumber(row[key]) : row[key])).join(','));
+    }
+    download('codex-token-usage.csv', lines.join('\n') + '\n', 'text/csv');
+  });
+}
+document.getElementById('summaryLine').textContent = 'Period: ' + text(DATA.metadata.since || '') + ' through ' + text(DATA.metadata.periodEnd || '') + '. Data source: ' + (DATA.metadata.stateDbPresent ? 'state_5.sqlite plus rollouts' : 'rollout JSONLs') + '.';
+renderReportParams();
+renderKpis();
+renderCostEstimate();
+renderPeriodRows();
+renderChart();
+renderDiagnostics();
+setupExports();
+</script>
+</body>
+</html>

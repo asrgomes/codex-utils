@@ -3,6 +3,8 @@
 - Unique id: contract-<repo>-<area>-<hash>
 - Name: <single-line name>
 - Tags: <tag-one>, <tag-two>
+- Covered boundaries:
+  - `boundary-<hash>` (`<path>:<start>-<end>`, <boundary type>, <evidence role>)
 - Links:
   - relates to: <contract-id> - <why the link matters>
 
@@ -53,6 +55,7 @@
 
 ## Evidence
 
+- Boundary: `boundary-<hash>` - <matcher/boundary type, trace direction, snippet hash, and claim>
 - `<path>:<line>` - <claim supported by this evidence>
 
 ## Validation
@@ -60,3 +63,4 @@
 - Scenario: <happy-path scenario or executable test idea>
 - Negative case: <invalid input, conflict, or boundary case>
 - Oracle: <how an agent or test decides the contract held>
+- Frontier status: <new, refreshed, stable-covered, stale-reconciled, or gap-converted>

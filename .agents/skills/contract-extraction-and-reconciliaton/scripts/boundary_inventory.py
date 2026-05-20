@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-MATCHER_VERSION = "boundary-inventory-v1"
+MATCHER_VERSION = "boundary-inventory-v2"
 INVENTORY_NAME = ".boundary-inventory.json"
 SKIP_PARTS = {".git", "target", "node_modules", ".idea", ".gradle", "build", "dist", "__pycache__"}
 TEXT_EXTENSIONS = {
@@ -366,7 +366,7 @@ def detect_source_boundaries(source: SourceFile, profile: dict) -> list[dict]:
             line_range = line_window(line, len(source.lines), window=5)
             symbol = symbol_for(source, line, match)
             snippet = "\n".join(source.lines[line_range[0] - 1 : line_range[1]])
-            boundary_id = boundary_id_for(source.rel, matcher.boundary_type, symbol, matcher.matcher_id)
+            boundary_id = boundary_id_for(source.label, matcher.boundary_type, symbol, matcher.matcher_id)
             boundaries.append(
                 {
                     "boundary_id": boundary_id,
