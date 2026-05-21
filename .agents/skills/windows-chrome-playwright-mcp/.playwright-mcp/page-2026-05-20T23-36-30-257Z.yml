@@ -1,0 +1,146 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e9] [cursor=pointer]: Skip to content
+  - navigation [ref=e11]:
+    - generic [ref=e12]:
+      - grid "Navigation menu" [ref=e14]:
+        - row " Organization" [ref=e15]:
+          - gridcell " Organization" [ref=e16]:
+            - link " Organization" [ref=e17] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e18]: 
+              - generic [ref=e19]: Organization
+        - row " Project Home" [ref=e20]:
+          - gridcell " Project Home" [selected] [ref=e21]:
+            - link " Project Home" [ref=e1455] [cursor=pointer]:
+              - /url: "#projects/vm/"
+              - generic [ref=e23]: 
+              - generic [ref=e24]: Project Home
+        - row " Workspaces" [ref=e25]:
+          - gridcell " Workspaces" [ref=e26]:
+            - link " Workspaces" [ref=e1456] [cursor=pointer]:
+              - /url: "#projects/vm/vbdt"
+              - generic [ref=e28]: 
+              - generic [ref=e29]: Workspaces
+        - row " Git" [ref=e30]:
+          - gridcell " Git" [ref=e31]:
+            - link " Git" [ref=e1457] [cursor=pointer]:
+              - /url: "#projects/vm/scm"
+              - generic [ref=e33]: 
+              - generic [ref=e34]: Git
+        - row " Merge Requests" [ref=e35]:
+          - gridcell " Merge Requests" [ref=e36]:
+            - link " Merge Requests" [ref=e1458] [cursor=pointer]:
+              - /url: "#projects/vm/reviews"
+              - generic [ref=e38]: 
+              - generic [ref=e39]: Merge Requests
+        - row " Environments" [ref=e40]:
+          - gridcell " Environments" [ref=e41]:
+            - link " Environments" [ref=e1459] [cursor=pointer]:
+              - /url: "#projects/vm/environments"
+              - generic [ref=e43]: 
+              - generic [ref=e44]: Environments
+        - row " Snippets" [ref=e45]:
+          - gridcell " Snippets" [ref=e46]:
+            - link " Snippets" [ref=e1460] [cursor=pointer]:
+              - /url: "#projects/vm/snippets"
+              - generic [ref=e48]: 
+              - generic [ref=e49]: Snippets
+        - row " Builds" [ref=e50]:
+          - gridcell " Builds" [ref=e51]:
+            - link " Builds" [ref=e1461] [cursor=pointer]:
+              - /url: "#projects/vm/carson"
+              - generic [ref=e53]: 
+              - generic [ref=e54]: Builds
+        - row " Project Administration" [ref=e55]:
+          - gridcell " Project Administration" [ref=e56]:
+            - link " Project Administration" [ref=e1462] [cursor=pointer]:
+              - /url: "#projects/vm/admin"
+              - generic [ref=e58]: 
+              - generic [ref=e59]: Project Administration
+      - generic [ref=e61]: Loading
+    - generic "Configure left navigator" [ref=e62]:
+      - button "Configure left navigator" [ref=e63] [cursor=pointer]:
+        - generic [ref=e64]:
+          - generic [ref=e66]: Configure left navigator
+          - generic [ref=e68]: 
+    - generic "Show/Hide Labels" [ref=e69]:
+      - button "Show/Hide Labels" [ref=e70] [cursor=pointer]:
+        - generic [ref=e71]:
+          - generic [ref=e73]: Show/Hide Labels
+          - generic [ref=e75]: 
+  - generic [ref=e3]:
+    - banner "Visual Builder Studio" [ref=e76]:
+      - banner [ref=e78]:
+        - generic "Show/Hide Menu" [ref=e79]:
+          - button "Show/Hide Menu" [ref=e80] [cursor=pointer]:
+            - generic [ref=e81]:
+              - generic [ref=e83]: 
+              - generic [ref=e85]: Show/Hide Menu
+        - link "Tencent Visual Builder Studio" [ref=e86] [cursor=pointer]:
+          - /url: "#"
+          - generic "Tencent"
+          - generic [ref=e87]: Visual Builder Studio
+        - generic [ref=e88]:
+          - generic "Feedback" [ref=e90]:
+            - button "Feedback" [ref=e91] [cursor=pointer]:
+              - generic [ref=e92]:
+                - generic [ref=e94]: 
+                - generic [ref=e96]: Feedback
+          - text:       
+        - generic "Antonio Sergio Ribeiro Gomes" [ref=e97]:
+          - button "Antonio Sergio Ribeiro Gomes" [ref=e98] [cursor=pointer]:
+            - generic [ref=e99]:
+              - generic [ref=e100]: Antonio Sergio Ribeiro Gomes
+              - img [ref=e102]:
+                - img [ref=e103]:
+                  - generic [ref=e104]: AS
+      - generic [ref=e108]:
+        - generic [ref=e110]:
+          - generic "Collapse Banner" [ref=e111]:
+            - button "Collapse Banner" [ref=e112] [cursor=pointer]:
+              - generic [ref=e113]:
+                - generic [ref=e115]: 
+                - generic [ref=e116]: Collapse Banner
+          - generic "Close Banner" [ref=e117]:
+            - button "Close Banner" [ref=e118] [cursor=pointer]:
+              - generic [ref=e119]:
+                - generic [ref=e121]: 
+                - generic [ref=e122]: Close Banner
+        - application "Banner Slides Displaying page 1 of 1" [ref=e124]:
+          - generic [ref=e130]:
+            - heading "Visual Builder Studio is now on version 26.04.0" [level=1] [ref=e133]
+            - generic [ref=e137]: More details coming soon...
+          - generic [ref=e139]: Displaying page 1 of 1
+      - generic [ref=e142]:
+        - heading "VM" [level=1] [ref=e1463]
+        - generic "Project List" [ref=e1464]:
+          - button "Project List" [ref=e1465] [cursor=pointer]:
+            - generic [ref=e1466]:
+              - generic [ref=e1468]: 
+              - generic [ref=e1470]: Project List
+        - heading "Project Home" [level=1] [ref=e1471]:
+          - generic [ref=e1472]: Project Home
+        - generic "Search Activities" [ref=e1473]:
+          - generic [ref=e1475]: 
+          - combobox "Search Activities" [ref=e1476]:
+            - textbox "Search Activities" [ref=e1477]
+    - status:
+      - generic [ref=e1478]: Updating list of workspaces...
+    - main [ref=e4]:
+      - generic [ref=e1481]:
+        - generic [ref=e1482]:
+          - progressbar [ref=e1485]
+          - progressbar [ref=e1490]
+          - progressbar [ref=e1495]
+        - generic [ref=e1499]:
+          - tablist [ref=e1500]:
+            - tab "Repositories" [ref=e1501] [cursor=pointer]:
+              - generic [ref=e1503]: Repositories
+            - tab "Statistics" [ref=e1504] [cursor=pointer]:
+              - generic [ref=e1506]: Statistics
+            - tab "Team" [ref=e1507] [cursor=pointer]:
+              - generic [ref=e1509]: Team
+          - generic [ref=e1510]:
+            - text:            
+            - progressbar [ref=e1513]
+  - text:          ﰑ
