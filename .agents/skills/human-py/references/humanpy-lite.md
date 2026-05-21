@@ -575,6 +575,31 @@ When a Codex-style agent follows HumanPy Lite:
    and operating rules short; place grammar details and examples in a single
    direct reference file.
 
+## Machine-readable linting
+
+For deterministic analysis, use:
+
+```bash
+node <path-to-skill>/scripts/human-py-lint.mjs lint --json --pretty <file-or->
+```
+
+The linter reads raw HumanPy Lite, Markdown files with `humanpy`/`human-py`
+fences, or stdin. It emits:
+
+- `blocks[].lines[]`: line number, classification, form, scope, details, and
+  placeholders seen on the line.
+- `warnings[]`: unresolved `<placeholders>` with unresolved roots and source
+  locations.
+- `blocks[].symbols[]`: variables, inputs, defaults, outputs, aliases,
+  function args, loop variables, and call results discovered by static scan.
+- `executionMap`: inputs, defaults, constraints, preconditions,
+  postconditions, variables, aliases, functions, calls, branches, loops,
+  collection additions, outputs, returns, ordered steps, notes, and unresolved
+  placeholders.
+
+Treat linter output as static analysis. It helps review structure and handoff
+quality, but it does not execute the workflow or prove external facts.
+
 ## Safeguards
 
 HumanPy Lite is not a way to bypass normal assistant rules.

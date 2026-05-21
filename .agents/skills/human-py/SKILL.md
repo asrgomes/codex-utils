@@ -56,6 +56,19 @@ Do not use this skill for:
 
 ## Unit Tests
 
+When the user asks `human-py lint` or requests machine-readable analysis, run
+the bundled linter:
+
+```bash
+node <path-to-this-skill>/scripts/human-py-lint.mjs lint --json --pretty <file-or->
+```
+
+The linter accepts a raw HumanPy Lite script, a Markdown file containing
+`humanpy`/`human-py` fences, or stdin (`-`). Its JSON includes validation
+errors, per-line classifications, unresolved placeholders, symbols, and an
+execution map with inputs, defaults, functions, calls, branches, loops,
+outputs, returns, and ordered steps. Omit `--json` for a short text summary.
+
 When the user asks `run human-py unit tests`, run the bundled test runner:
 
 ```bash
@@ -63,8 +76,8 @@ node <path-to-this-skill>/scripts/run-human-py-unit-tests.mjs
 ```
 
 The runner loads separate test case files from `tests/*.case.md` and checks the
-HumanPy Lite validation contract. Report the pass/fail summary and any failing
-case names.
+HumanPy Lite validation contract, then smoke-checks the JSON linter. Report the
+pass/fail summary and any failing case names.
 
 Do not read, summarize, or load files under `tests/` during normal HumanPy Lite
 work. Treat those files as unit-test fixtures that are loaded only when the
