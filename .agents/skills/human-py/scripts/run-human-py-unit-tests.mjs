@@ -38,6 +38,8 @@ function stripListMarker(line) {
 }
 
 function classify(trimmed) {
+  const sectionLabel = /^(inputs|outputs|defaults|constraints|preconditions|postconditions|steps|notes):$/;
+
   if (/^set\b/.test(trimmed) && !/^set\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*.+$/.test(trimmed)) {
     return { ok: false, reason: "malformed set assignment" };
   }
@@ -71,6 +73,7 @@ function classify(trimmed) {
     /^return\s+.+$/,
     /^add\s+.+\s+to\s+.+$/,
     /^use\s+.+\s+as\s+[A-Za-z_][A-Za-z0-9_]*$/,
+    sectionLabel,
   ];
 
   if (forms.some((form) => form.test(trimmed))) {
@@ -112,7 +115,8 @@ function validate(source) {
       errors.push(`line ${lineNumber}: ${result.reason}`);
     }
 
-    previousWasBlockOpener = /^(def|if|elif|else|for\b|for each\b).+:$/.test(trimmed);
+    previousWasBlockOpener = /^(def|if|elif|else|for\b|for each\b).+:$/.test(trimmed)
+      || /^(inputs|outputs|defaults|constraints|preconditions|postconditions|steps|notes):$/.test(trimmed);
     previousIndent = indent;
   });
 

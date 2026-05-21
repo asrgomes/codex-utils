@@ -14,3 +14,7 @@ target/
 build/
 
 .idea/
+
+.playwright-cli/*
+.playwright-mcp/*
+.pytest_cache/*

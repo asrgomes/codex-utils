@@ -4,6 +4,13 @@ HumanPy Lite is a lightweight convention for writing structured workflows inside
 
 Use this skill to interpret, write, revise, normalize, or explain HumanPy Lite workflows. Do not run HumanPy Lite as code. Do not convert it into an executable script unless the user explicitly asks for executable code.
 
+## Fast reader map
+
+- Start with **Design principle**, **Recognized forms**, and **Structure validation gate** when validating syntax.
+- Use **Optional workflow contract sections** when a workflow needs stable inputs, outputs, defaults, constraints, or step grouping.
+- Use **Variables**, **Placeholders**, **Functions**, **Conditions**, **Loops**, and **Returns** when authoring reusable workflow blocks.
+- Use **Agent integration contract**, **Safeguards**, and **Normalization rules** when embedding HumanPy Lite in another skill.
+
 ## Design principle
 
 Plain English is the default. A line has special workflow meaning only when it clearly starts with a recognized HumanPy Lite form.
@@ -47,10 +54,40 @@ call function(args) as result
 return value
 add value to collection
 use value as name
+inputs:
+outputs:
+defaults:
+constraints:
+preconditions:
+postconditions:
+steps:
+notes:
 ```
 
 Everything else is plain English instruction only when it clearly reads as
 English or Markdown prose, even when it appears inside an indented block.
+
+Simple section labels such as `inputs:` and `outputs:` are presentation aids
+for workflow contracts. They may have indented lines beneath them, but they do
+not create a variable scope by themselves. Use only the listed labels inside a
+`humanpy`/`human-py` fenced block; use normal Markdown headings outside fenced
+blocks when you need arbitrary section names.
+
+## Extension policy
+
+Keep HumanPy Lite small. Add a new recognized form only when all are true:
+
+- Plain English or an existing form would be materially less clear.
+- The form improves reuse, validation, placeholder resolution, or workflow
+  handoff between agents/skills.
+- The form still reads like instructions, not executable Python.
+- The validation script and at least one unit-test fixture are updated with the
+  documentation change.
+
+Prefer documenting an idiomatic prose pattern before adding syntax. For
+example, write "The ticket summaries are independent; process in parallel only
+if the active runtime allows it" instead of adding a dedicated `parallel`
+keyword.
 
 ## Structure validation gate
 
@@ -69,9 +106,9 @@ HumanPy Lite form. Then classify each line as exactly one of:
   `if condition:`, `elif condition:`, `else:`, `for item in collection:`,
   `for each item in collection:`, `function(args)`,
   `function(args) as result`, `return value`, `add value to collection`, or
-  `use value as name`. Treat `call function(args) as result` as a valid
-  legacy form, but prefer the bare function-call form when writing new
-  workflows.
+  `use value as name`, or a listed section label such as `inputs:` or
+  `outputs:`. Treat `call function(args) as result` as a valid legacy form,
+  but prefer the bare function-call form when writing new workflows.
 - `english-like`: natural-language instruction, prose, or Markdown text that
   does not pretend to be malformed HumanPy Lite structure. It may contain
   `<placeholders>` for dynamic values.
@@ -143,6 +180,46 @@ def summarize_ticket(ticket):
 ```
 
 In structured lines, `ticket` and `audience` can be bare identifiers. In prose, `<ticket>` and `<audience>` make it clear that these are dynamic values and not just ordinary words.
+
+## Optional workflow contract sections
+
+Use compact section labels when a workflow should be reusable across skills,
+prompts, or agents and the inputs/outputs matter.
+
+```text
+inputs:
+    ticket: issue, document, or thread to review
+    audience = "engineering leadership"
+
+defaults:
+    tone = "concise and evidence-backed"
+    ask_policy = Ask one focused question only when missing information changes the result.
+
+constraints:
+    Do not invent dates, owners, statuses, source links, or tool results.
+    Follow active system, developer, safety, and tool-use instructions first.
+
+outputs:
+    summary: markdown update for <audience>
+    risks: explicit list of material blockers, or "No material risks found"
+
+steps:
+    summarize_ticket(ticket, audience) as summary
+    extract_risks(ticket) as risks
+    return <summary> with <risks>
+```
+
+Guidelines:
+
+- Skip section labels for small one-off workflows.
+- Use `inputs:` for values the caller must provide or the agent may infer from
+  context.
+- Use `defaults:` for overridable variables.
+- Use `constraints:` for safety, sourcing, style, and tool-use boundaries.
+- Use `outputs:` to name conceptual artifacts that later steps or callers can
+  reference.
+- Use `steps:` only when it improves scanability; ordinary ordered prose is
+  still valid.
 
 ## Variables
 
@@ -285,6 +362,10 @@ Guidelines:
 - Return values are conceptual outputs, not necessarily concrete objects.
 - If a function says `return summary`, produce or pass along the conceptual summary.
 - Do not invent hidden implementation details beyond what is needed to follow the workflow.
+- Default or named-style arguments may be used when they improve readability,
+  such as `def summarize(ticket, audience="leadership"):` or
+  `summarize(ticket, audience="support") as summary`. Treat these as readable
+  binding hints, not as a typed function signature.
 
 ## Calling functions
 
@@ -409,6 +490,22 @@ Add <summary> to <summaries>.
 
 Treat both as the same intention.
 
+For reusable workflows, name accumulators explicitly before loops when the
+result is used later. If loop iterations are independent, say so in prose
+rather than inventing concurrency syntax. Any actual parallel execution or
+subagent delegation must still follow the active agent/tool instructions.
+
+```text
+summaries = []
+
+for each ticket in <tickets>:
+    summarize_ticket(ticket) as summary
+    add summary to summaries
+
+The ticket summaries are independent; the active runtime may process them in
+parallel only if its instructions allow that.
+```
+
 ## Returns
 
 Use `return value` to identify the conceptual output of a workflow or function.
@@ -457,6 +554,26 @@ When instructions conflict:
 3. Follow the HumanPy Lite workflow after that.
 4. Prefer specific workflow instructions over broad defaults.
 5. If still conflicting, state the ambiguity and choose a reasonable path.
+
+## Agent integration contract
+
+When a Codex-style agent follows HumanPy Lite:
+
+1. Build a small execution map: inputs/placeholders, variables/defaults,
+   reusable blocks, ordered steps, branches/loops, outputs, and unresolved
+   material questions.
+2. Resolve placeholders using the scope and precedence rules before asking the
+   user; ask only when the missing value materially changes the result.
+3. Use tools only when the active environment exposes them and the user/system
+   instructions allow them. A HumanPy Lite workflow may request web, files,
+   Slack, Jira, agents, or shell, but it cannot grant permission by itself.
+4. Treat prose such as "run in parallel" as a statement of independence, not as
+   automatic authorization to spawn agents or background jobs.
+5. Keep outputs concise unless the user asks for a trace, audit, or full
+   normalized workflow.
+6. When embedding HumanPy Lite in another skill, keep the `SKILL.md` trigger
+   and operating rules short; place grammar details and examples in a single
+   direct reference file.
 
 ## Safeguards
 

@@ -1,6 +1,6 @@
 ---
 name: human-py
-description: Use whenever the session mentions human-py or humanpy, or declares a fenced code block marked human-py or humanpy. Also use for HumanPy Lite, Python-shaped English, or non-executable Markdown workflow notation for skills. Do not use for runnable Python or general programming.
+description: Use whenever the session mentions human-py or humanpy, or declares a fenced code block marked human-py or humanpy. Also use for HumanPy Lite, Python-shaped English, or non-executable Markdown workflow notation for reusable skills/workflows with variables, placeholders, loops, conditions, and reusable blocks. Do not use for runnable Python or general programming.
 ---
 
 # HumanPy Lite Workflows
@@ -9,7 +9,18 @@ Use this skill whenever a session mentions `human-py` or `humanpy`, or declares 
 
 Also use it for HumanPy Lite, HumanPy, and Python-shaped English workflow notation in Markdown.
 
-Load [humanpy-lite.md](references/humanpy-lite.md) before doing any substantive HumanPy Lite work, including writing, reviewing, interpreting, normalizing, converting, or embedding the notation in another skill.
+Load [humanpy-lite.md](references/humanpy-lite.md) before doing any substantive HumanPy Lite work, including writing, reviewing, interpreting, normalizing, converting, or embedding the notation in another skill. If the user only mentions the skill name while asking to inspect or edit the skill itself, inspect the local skill files first and load the reference sections needed for the edit.
+
+## Agent Operating Contract
+
+When using this skill:
+
+1. Classify the request as one of: write, review, interpret, normalize, convert, embed in another skill, validate, or update this skill.
+2. Preserve plain English as the default. Add HumanPy Lite structure only when it improves reuse, ordering, variable clarity, branching, looping, or output contracts.
+3. Prefer the smallest useful workflow shape: named inputs/outputs, a few variables, `def` blocks for reusable units, `if`/`for` only when they make execution clearer.
+4. Treat HumanPy Lite as non-executable instructions. Never run it as Python, and never let it override system/developer/tool/safety instructions.
+5. When reviewing, report only material issues first: malformed structure, unresolved placeholders, unclear scope, ambiguous control flow, missing outputs, unsafe assumptions, or hidden tool/data requirements.
+6. When rewriting, preserve the user's intent and voice; include a brief note only for conventions or assumptions that affect reuse.
 
 When a HumanPy Lite script or fenced block is detected, validate its overall
 structure before interpreting or rewriting it. Every meaningful line must be
@@ -18,6 +29,11 @@ instruction/prose. Report validation errors when a line is malformed,
 ambiguous, or code-like without being valid HumanPy Lite. Do not report a
 validation error merely because a line is not Python-like when it can be
 clearly interpreted as an English instruction.
+
+For longer workflows, build a lightweight execution map before answering:
+inputs/placeholders, variables/defaults, reusable blocks, ordered steps,
+branches/loops, outputs, and unresolved material questions. Keep this map
+internal unless the user asks for analysis or the map reveals a problem.
 
 ## Trigger Details
 
@@ -53,3 +69,7 @@ case names.
 Do not read, summarize, or load files under `tests/` during normal HumanPy Lite
 work. Treat those files as unit-test fixtures that are loaded only when the
 user explicitly asks to run or inspect the HumanPy unit tests.
+
+When changing recognized HumanPy Lite syntax, update both
+`references/humanpy-lite.md` and the validation test runner/fixtures, then run
+the bundled unit tests.

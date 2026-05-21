@@ -42,6 +42,22 @@ codex mcp get windows-chrome
 If the server was just added or replaced, restart the Codex CLI session. Some clients load MCP
 server configuration only at session start.
 
+## Chrome Opens During Codex Startup
+
+Codex may start the `windows-chrome` MCP server process during session initialization, but that
+process must not start or reuse Windows Chrome while handling MCP initialization or `tools/list`.
+The wrapper starts Chrome only when a real browser tool is called.
+
+Check the registered command and wrapper tests:
+
+```bash
+codex mcp get windows-chrome
+node --test scripts/playwright-mcp-wrapper.test.mjs
+```
+
+If Chrome still opens before a browser tool call, verify that `codex mcp get windows-chrome` points
+to `scripts/playwright-mcp-wrapper.mjs` from this skill and not to an older eager launcher.
+
 ## Playwright MCP Install Fails
 
 The skill installs `@playwright/mcp` into `.runtime/` under the skill directory. If install fails,
