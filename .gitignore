@@ -15,6 +15,10 @@ build/
 
 .idea/
 
-.playwright-cli/*
-.playwright-mcp/*
+# Browser automation captures and local runtime state
+**/.playwright-cli/
+**/.playwright-mcp/
+**/.runtime/
+screenshots/
+
 .pytest_cache/*
