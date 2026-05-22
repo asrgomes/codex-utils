@@ -11,9 +11,18 @@ export const scriptDir = import.meta.dirname;
 export const skillDir = path.resolve(scriptDir, '..');
 export const cdpPort = readIntegerEnv('WINDOWS_CHROME_CDP_PORT', DEFAULT_CDP_PORT);
 export const cdpEndpoint = `http://localhost:${cdpPort}`;
-export const runtimeDir = process.env.WINDOWS_CHROME_MCP_RUNTIME_DIR ||
+export const runtimeDir = process.env.WINDOWS_CHROME_PLAYWRIGHT_RUNTIME_DIR ||
   path.join(skillDir, '.runtime');
-export const mcpBin = path.join(runtimeDir, 'node_modules', '.bin', 'playwright-mcp');
+export const playwrightBin = path.join(runtimeDir, 'node_modules', '.bin', 'playwright');
+export const playwrightCliPath = path.join(
+  runtimeDir,
+  'node_modules',
+  'playwright-core',
+  'lib',
+  'tools',
+  'cli-client',
+  'cli.js',
+);
 
 export function fail(message, code = 1) {
   console.error(`ERROR: ${message}`);

@@ -41,7 +41,7 @@ $TimeoutSeconds = ${timeoutSeconds}
 if ($ProfilePathOverride) {
   $ProfilePath = $ProfilePathOverride
 } else {
-  $ProfilePath = Join-Path $env:LOCALAPPDATA 'Codex\\windows-chrome-playwright-mcp\\profile'
+  $ProfilePath = Join-Path $env:LOCALAPPDATA 'Codex\\playwright-wsl\\profile'
 }
 
 function Write-Fail([string] $Message) {

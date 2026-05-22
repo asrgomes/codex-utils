@@ -1,7 +1,0 @@
-interface:
-  display_name: "Windows Chrome Playwright MCP"
-  short_description: "WSL2-only Windows Chrome control"
-  default_prompt: "Use $windows-chrome-playwright-mcp only from WSL2 to control Windows Chrome through Playwright MCP."
-
-policy:
-  allow_implicit_invocation: true

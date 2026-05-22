@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {
   cdpPort,
+  exitFromResult,
   fail,
   getCdpVersion,
   parseCliArgs,
@@ -43,6 +44,13 @@ function requireWindowsChrome() {
   }
 }
 
+function ensurePlaywrightCliInstalled() {
+  const result = runNodeScript('ensure-playwright-cli.mjs', [], {
+    stdio: 'inherit',
+  });
+  exitFromResult(result, 'Playwright CLI installation failed');
+}
+
 async function requireCdpHealth() {
   const url = `http://localhost:${cdpPort}/json/version`;
   const result = await getCdpVersion(cdpPort, 3000);
@@ -58,8 +66,7 @@ requireCommand('powershell.exe');
 requireWindowsChrome();
 
 if (mode !== '--chrome-only') {
-  requireCommand('npm');
-  requireCommand('npx');
+  ensurePlaywrightCliInstalled();
 }
 
 if (mode === '--cdp' || mode === 'full') {

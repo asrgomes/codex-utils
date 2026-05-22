@@ -1,16 +1,16 @@
 ---
-name: windows-chrome-playwright-mcp
-description: Use only when an agent is running inside WSL2 on Windows and needs direct Windows Chrome control through Playwright MCP for authenticated or interactive browser work. Do not use for native Windows, macOS, Linux desktop, containers, or remote browser services.
+name: playwright-wsl
+description: Use only when an agent is running inside WSL2 on Windows and needs direct Windows Chrome control through a persistent Playwright CLI session for authenticated or interactive browser work. Do not use for native Windows, macOS, Linux desktop, containers, or remote browser services.
 ---
 
-# Windows Chrome Playwright MCP
+# Playwright WSL
 
 ## Applicability Gate
 
 Use this skill only if all are true:
 
 - The agent is running inside WSL2 on Windows.
-- The task needs direct Windows Chrome control through Playwright MCP.
+- The task needs direct Windows Chrome control through Playwright CLI.
 - HTTP/API access is insufficient because the task needs authenticated browser state, interactive
   UI, JavaScript-rendered state, screenshots, downloads/uploads, forms, SSO, or what a human sees.
 

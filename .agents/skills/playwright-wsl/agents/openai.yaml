@@ -1,0 +1,7 @@
+interface:
+  display_name: "Playwright WSL"
+  short_description: "WSL2-only Windows Chrome control"
+  default_prompt: "Use $playwright-wsl only from WSL2 to control Windows Chrome through a persistent Playwright CLI session."
+
+policy:
+  allow_implicit_invocation: true

@@ -19,6 +19,21 @@ function frontmatterDescription(skillMarkdown) {
   return description.slice('description: '.length);
 }
 
+function frontmatterName(skillMarkdown) {
+  const match = skillMarkdown.match(/^---\n(?<frontmatter>[\s\S]*?)\n---/);
+  assert.ok(match, 'SKILL.md should contain YAML frontmatter');
+  const name = match.groups.frontmatter
+    .split('\n')
+    .find((line) => line.startsWith('name: '));
+  assert.ok(name, 'SKILL.md frontmatter should contain name');
+  return name.slice('name: '.length);
+}
+
+test('skill identity is playwright-wsl', () => {
+  assert.equal(path.basename(skillDir), 'playwright-wsl');
+  assert.equal(frontmatterName(readSkillFile('SKILL.md')), 'playwright-wsl');
+});
+
 test('skill trigger description is explicitly WSL-only', () => {
   const description = frontmatterDescription(readSkillFile('SKILL.md'));
 
@@ -31,7 +46,12 @@ test('OpenAI skill metadata keeps the WSL-only prompt surface', () => {
   const metadata = readSkillFile('agents/openai.yaml');
 
   assert.match(metadata, /short_description: "WSL2-only Windows Chrome control"/);
-  assert.match(metadata, /default_prompt: "Use \$windows-chrome-playwright-mcp only from WSL2/);
+  assert.match(metadata, /display_name: "Playwright WSL"/);
+  assert.match(metadata, /default_prompt: "Use \$playwright-wsl only from WSL2/);
+  assert.match(metadata, /persistent Playwright CLI session/);
+  assert.doesNotMatch(metadata, /Playwright MCP/);
+  assert.doesNotMatch(metadata, /wsl-playwright/);
+  assert.doesNotMatch(metadata, /windows-chrome-playwright-cli/);
 });
 
 test('SKILL.md stays as a small applicability gate', () => {
@@ -50,7 +70,22 @@ test('operating guide contains detailed browser workflow after applicability pas
 
   assert.match(guide, /## Sandbox Escalation/);
   assert.match(guide, /## Browser Workflow/);
-  assert.match(guide, /## Safety Rules/);
+  assert.match(guide, /persistent Playwright CLI session/);
+  assert.match(guide, /Do not detach or stop Chrome between ordinary page operations/);
+  assert.match(guide, /automatically installs local Playwright CLI dependencies/);
+  assert.match(guide, /%LOCALAPPDATA%\\Codex\\playwright-wsl\\profile/);
   assert.match(guide, /references\/browser-interaction-idioms\.md/);
   assert.match(guide, /references\/troubleshooting\.md/);
+  assert.doesNotMatch(guide, /MCP server/);
+  assert.doesNotMatch(guide, /playwright-mcp/);
+  assert.doesNotMatch(guide, /wsl-playwright/);
+  assert.doesNotMatch(guide, /windows-chrome-playwright-cli/);
+});
+
+test('doctor preflight installs Playwright CLI automatically', () => {
+  const doctor = readSkillFile('scripts/doctor.mjs');
+
+  assert.match(doctor, /ensure-playwright-cli\.mjs/);
+  assert.match(doctor, /Playwright CLI installation failed/);
+  assert.match(doctor, /mode !== '--chrome-only'/);
 });
