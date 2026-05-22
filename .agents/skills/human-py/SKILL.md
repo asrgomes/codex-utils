@@ -54,7 +54,7 @@ Do not use this skill for:
 - General programming syntax questions.
 - Executable script generation unless the user explicitly asks to convert a workflow into executable code.
 
-## Unit Tests
+## Linting and Unit Tests
 
 When the user asks `human-py lint` or requests machine-readable analysis, run
 the bundled linter:

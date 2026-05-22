@@ -1,0 +1,4 @@
+interface:
+  display_name: "HumanPy Lite"
+  short_description: "Structure reusable plain-English workflows with lightweight pseudocode and linting"
+  default_prompt: "Use $human-py to write, review, normalize, or lint HumanPy Lite workflows with placeholders, reusable blocks, conditions, loops, outputs, and execution maps while preserving plain English as the default."

@@ -246,7 +246,9 @@ export function classifyLine(rawLine, options = {}) {
     return { ok: false, reason: "malformed alias statement", type: "error", form: "error", opensBlock: false, details: {}, ...base };
   }
 
-  if (/^(import|from|class|try|except|finally|with|while)\b/.test(trimmed) || /^@/.test(trimmed)) {
+  if (/^(import|class|try|except|finally|with|while)\b/.test(trimmed)
+    || /^from\s+\S+\s+import\b/.test(trimmed)
+    || /^@/.test(trimmed)) {
     return { ok: false, reason: "executable Python construct", type: "error", form: "error", opensBlock: false, details: {}, ...base };
   }
 
@@ -362,13 +364,32 @@ function maskInlineCodeAndQuotedAngles(line) {
   return masked;
 }
 
+function maskStringLiterals(text) {
+  return text.replace(/(["'])(?:\\.|(?!\1)[^\\\n])*\1/g, (literal) => " ".repeat(literal.length));
+}
+
+function previousNonSpace(text, index) {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (!/\s/.test(text[cursor])) {
+      return text[cursor];
+    }
+  }
+  return "";
+}
+
 function placeholderRoots(expression) {
-  const identifiers = expression.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
+  const maskedExpression = maskStringLiterals(expression);
+  const identifiers = maskedExpression.matchAll(/[A-Za-z_][A-Za-z0-9_]*/g);
   const roots = [];
 
-  for (const identifier of identifiers) {
+  for (const match of identifiers) {
+    const identifier = match[0];
     const lower = identifier.toLowerCase();
     if (RESERVED_PLACEHOLDER_WORDS.has(lower)) {
+      continue;
+    }
+
+    if (previousNonSpace(maskedExpression, match.index) === ".") {
       continue;
     }
 
@@ -380,7 +401,7 @@ function placeholderRoots(expression) {
   return roots;
 }
 
-function extractPlaceholders(rawLine, absoluteLine, blockLine, scopePath) {
+function extractPlaceholders(rawLine, absoluteLine, blockLine, scopePath, visibleScopePath) {
   const masked = maskInlineCodeAndQuotedAngles(rawLine);
   const placeholders = [];
   const placeholderPattern = /<([^>\n]+)>/g;
@@ -400,6 +421,7 @@ function extractPlaceholders(rawLine, absoluteLine, blockLine, scopePath) {
       blockLine,
       column: match.index + 1,
       scope: scopePath,
+      visibleScope: visibleScopePath,
     });
   }
 
@@ -414,8 +436,15 @@ function addSymbol(symbols, symbol) {
   symbols.get(symbol.name).push(symbol);
 }
 
-function scopePath(scopeStack) {
-  return scopeStack.map((scope) => scope.name);
+function scopePath(scopeStack, options = {}) {
+  const { includeSections = true } = options;
+  return scopeStack
+    .filter((scope) => includeSections || scope.type !== "section")
+    .map((scope) => scope.name);
+}
+
+function visibilityPath(scopeStack) {
+  return scopePath(scopeStack, { includeSections: false });
 }
 
 function currentScope(scopeStack, type) {
@@ -450,6 +479,20 @@ function symbolList(symbols) {
   });
 }
 
+function isScopePrefix(candidate, target) {
+  if (!Array.isArray(candidate) || !Array.isArray(target) || candidate.length > target.length) {
+    return false;
+  }
+
+  return candidate.every((part, index) => part === target[index]);
+}
+
+function symbolVisibleToPlaceholder(symbol, placeholder) {
+  const visibleScope = symbol.visibleScope || symbol.scope || ["global"];
+  const placeholderScope = placeholder.visibleScope || placeholder.scope || ["global"];
+  return isScopePrefix(visibleScope, placeholderScope);
+}
+
 function mergeExecutionMaps(blocks) {
   const empty = {
     inputs: [],
@@ -480,16 +523,16 @@ function mergeExecutionMaps(blocks) {
   return empty;
 }
 
-function addOrderedStep(executionMap, line, classified, scope) {
-  if (classified.form === "blank" || classified.form === "comment" || classified.form === "section_label") {
+function addOrderedStep(executionMap, lineRecord) {
+  if (lineRecord.form === "blank" || lineRecord.form === "comment" || lineRecord.form === "section_label") {
     return;
   }
 
   executionMap.orderedSteps.push({
-    line,
-    scope,
-    form: classified.form,
-    text: classified.content,
+    line: lineRecord.line,
+    scope: lineRecord.scope,
+    form: lineRecord.form,
+    text: lineRecord.content,
   });
 }
 
@@ -535,7 +578,8 @@ function lintBlock(block) {
     }
 
     const activeScopePath = scopePath(scopeStack);
-    const linePlaceholders = extractPlaceholders(rawLine, absoluteLine, blockLine, activeScopePath);
+    const activeVisibleScopePath = visibilityPath(scopeStack);
+    const linePlaceholders = extractPlaceholders(rawLine, absoluteLine, blockLine, activeScopePath, activeVisibleScopePath);
     placeholders.push(...linePlaceholders);
 
     const lineRecord = {
@@ -580,8 +624,6 @@ function lintBlock(block) {
       const functionScope = currentScope(scopeStack, "function");
 
       if (classified.ok) {
-        addOrderedStep(executionMap, absoluteLine, classified, activeScopePath);
-
         if (sectionScope && classified.form === "prose") {
           const entry = sectionEntry(classified.content);
           if (entry) {
@@ -591,17 +633,19 @@ function lintBlock(block) {
             if (sectionScope.name === "inputs") {
               const input = { name: entry.name, value: entry.value, line: absoluteLine, scope: activeScopePath };
               executionMap.inputs.push(input);
-              addSymbol(symbols, { ...input, kind: "input" });
+              addSymbol(symbols, { ...input, kind: "input", visibleScope: activeVisibleScopePath });
             } else if (sectionScope.name === "outputs") {
               const output = { name: entry.name, value: entry.value, line: absoluteLine, scope: activeScopePath };
               executionMap.outputs.push(output);
-              addSymbol(symbols, { ...output, kind: "output" });
+              addSymbol(symbols, { ...output, kind: "output", visibleScope: activeVisibleScopePath });
             } else if (sectionScope.name === "defaults") {
               const defaultValue = { name: entry.name, value: entry.value, line: absoluteLine, scope: activeScopePath };
               executionMap.defaults.push(defaultValue);
-              addSymbol(symbols, { ...defaultValue, kind: "default" });
+              addSymbol(symbols, { ...defaultValue, kind: "default", visibleScope: activeVisibleScopePath });
             }
-          } else if (["constraints", "preconditions", "postconditions", "notes"].includes(sectionScope.name)) {
+          }
+
+          if (["constraints", "preconditions", "postconditions", "notes"].includes(sectionScope.name)) {
             executionMap[sectionScope.name].push({
               line: absoluteLine,
               text: classified.content,
@@ -620,16 +664,16 @@ function lintBlock(block) {
 
           if (sectionScope?.name === "inputs") {
             executionMap.inputs.push(variable);
-            addSymbol(symbols, { ...variable, kind: "input" });
+            addSymbol(symbols, { ...variable, kind: "input", visibleScope: activeVisibleScopePath });
           } else if (sectionScope?.name === "outputs") {
             executionMap.outputs.push(variable);
-            addSymbol(symbols, { ...variable, kind: "output" });
+            addSymbol(symbols, { ...variable, kind: "output", visibleScope: activeVisibleScopePath });
           } else if (sectionScope?.name === "defaults") {
             executionMap.defaults.push(variable);
-            addSymbol(symbols, { ...variable, kind: "default" });
+            addSymbol(symbols, { ...variable, kind: "default", visibleScope: activeVisibleScopePath });
           } else {
             executionMap.variables.push(variable);
-            addSymbol(symbols, { ...variable, kind: "variable" });
+            addSymbol(symbols, { ...variable, kind: "variable", visibleScope: activeVisibleScopePath });
           }
         } else if (classified.form === "alias") {
           const alias = {
@@ -639,7 +683,7 @@ function lintBlock(block) {
             scope: activeScopePath,
           };
           executionMap.aliases.push(alias);
-          addSymbol(symbols, { ...alias, kind: "alias" });
+          addSymbol(symbols, { ...alias, kind: "alias", visibleScope: activeVisibleScopePath });
         } else if (classified.form === "function_definition") {
           const functionInfo = {
             name: classified.details.name,
@@ -650,7 +694,7 @@ function lintBlock(block) {
             calls: [],
           };
           executionMap.functions.push(functionInfo);
-          addSymbol(symbols, { name: functionInfo.name, kind: "function", line: absoluteLine, scope: activeScopePath });
+          addSymbol(symbols, { name: functionInfo.name, kind: "function", line: absoluteLine, scope: activeScopePath, visibleScope: activeVisibleScopePath });
 
           const functionScopeRecord = {
             id: `function:${functionInfo.name}:${absoluteLine}`,
@@ -669,6 +713,7 @@ function lintBlock(block) {
                 default: arg.default,
                 line: absoluteLine,
                 scope: scopePath(scopeStack),
+                visibleScope: visibilityPath(scopeStack),
               });
             }
           }
@@ -691,6 +736,7 @@ function lintBlock(block) {
               source: classified.details.name,
               line: absoluteLine,
               scope: activeScopePath,
+              visibleScope: activeVisibleScopePath,
             });
           }
         } else if (classified.form === "if" || classified.form === "elif" || classified.form === "else") {
@@ -729,6 +775,7 @@ function lintBlock(block) {
             collection: classified.details.collection,
             line: absoluteLine,
             scope: scopePath(scopeStack),
+            visibleScope: visibilityPath(scopeStack),
           });
         } else if (classified.form === "collection_add") {
           executionMap.collections.push({
@@ -756,6 +803,8 @@ function lintBlock(block) {
             indent: classified.indent,
           });
         }
+
+        addOrderedStep(executionMap, lineRecord);
       }
 
       previousWasBlockOpener = classified.opensBlock;
@@ -765,10 +814,14 @@ function lintBlock(block) {
     lines.push(lineRecord);
   });
 
-  const knownSymbols = new Set(symbols.keys());
   const resolvedPlaceholders = placeholders.map((placeholder) => {
     const unresolvedRoots = placeholder.roots.filter((root) => {
-      return !knownSymbols.has(root) && !CONTEXTUAL_PLACEHOLDERS.has(root);
+      if (CONTEXTUAL_PLACEHOLDERS.has(root)) {
+        return false;
+      }
+
+      const definitions = symbols.get(root) || [];
+      return !definitions.some((symbol) => symbolVisibleToPlaceholder(symbol, placeholder));
     });
 
     return {
@@ -848,4 +901,3 @@ export function summarizeLint(report) {
 
   return `${lines.join("\n")}\n`;
 }
-

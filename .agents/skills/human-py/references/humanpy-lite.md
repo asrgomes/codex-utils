@@ -599,6 +599,10 @@ fences, or stdin. It emits:
 
 Treat linter output as static analysis. It helps review structure and handoff
 quality, but it does not execute the workflow or prove external facts.
+For placeholder resolution, property paths such as `<ticket.owner>` resolve
+from the root symbol (`ticket`). Section labels are treated as contract
+presentation, not variable scopes, so a result produced under `steps:` may be
+referenced by `outputs:`.
 
 ## Safeguards
 

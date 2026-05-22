@@ -78,7 +78,46 @@ const lintSmokePassed = lintReport.blocks[0].lines.some((line) => line.form === 
   && lintReport.warnings.some((warning) => warning.text === "<missing_context>")
   && !lintReport.warnings.some((warning) => warning.text === "<audience>");
 
-if (lintSmokePassed) {
+const scopeReport = lintSource(`def summarize_ticket(ticket):
+    return summary
+
+Write <ticket> outside the function.
+`);
+
+const scopeSmokePassed = scopeReport.warnings.some((warning) => warning.text === "<ticket>");
+
+const sectionNameFunctionReport = lintSource(`def steps(ticket):
+    Write <ticket> inside the function.
+
+Write <ticket> outside the function.
+`);
+
+const sectionNameFunctionScopePassed = sectionNameFunctionReport.warnings.length === 1
+  && sectionNameFunctionReport.warnings[0].text === "<ticket>"
+  && sectionNameFunctionReport.warnings[0].line === 4;
+
+const sectionScopeReport = lintSource(`inputs:
+    ticket: issue to review
+
+steps:
+    summarize_ticket(ticket) as summary
+
+outputs:
+    final: Include <ticket.owner> and <summary>.
+
+notes:
+    Source: use the active issue.
+`);
+
+const sectionScopeSmokePassed = !sectionScopeReport.warnings.some((warning) => {
+  return warning.text === "<ticket.owner>" || warning.text === "<summary>";
+})
+  && sectionScopeReport.executionMap.notes.some((note) => note.text === "Source: use the active issue.")
+  && sectionScopeReport.executionMap.orderedSteps.some((step) => {
+    return step.text === "final: Include <ticket.owner> and <summary>." && step.form === "section_entry";
+  });
+
+if (lintSmokePassed && scopeSmokePassed && sectionNameFunctionScopePassed && sectionScopeSmokePassed) {
   console.log("PASS lint-json-analysis");
 } else {
   failed += 1;
