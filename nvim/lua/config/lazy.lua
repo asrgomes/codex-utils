@@ -13,6 +13,9 @@ require('lazy').setup {
   spec = {
     { import = 'plugins' },
   },
+  rocks = {
+    enabled = false,
+  },
   ui = {
     icons = vim.g.have_nerd_font and {} or {
       cmd = '⌘',

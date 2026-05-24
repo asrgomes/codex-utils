@@ -9,7 +9,8 @@ return {
       },
     },
     config = function(_, opts)
-      require('csvview').setup(opts)
+      local csvview = require 'csvview'
+      csvview.setup(opts)
 
       local csv_filetypes = {
         csv = true,
@@ -17,6 +18,10 @@ return {
       }
 
       local function enable_csv_view(bufnr)
+        if csvview.is_enabled(bufnr) then
+          return
+        end
+
         vim.api.nvim_buf_call(bufnr, function()
           vim.cmd.CsvViewEnable()
         end)

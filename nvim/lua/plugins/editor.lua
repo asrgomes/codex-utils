@@ -1,6 +1,35 @@
 local default_markdownlint_config = vim.fn.stdpath 'config' .. '/.markdownlint.json'
 local default_prettier_config = vim.fn.stdpath 'config' .. '/.prettierrc.json'
 
+local treesitter_languages = {
+  'bash',
+  'c',
+  'clojure',
+  'diff',
+  'html',
+  'javascript',
+  'jsdoc',
+  'json',
+  'jsonc',
+  'lua',
+  'luadoc',
+  'markdown',
+  'markdown_inline',
+  'query',
+  'tsx',
+  'typescript',
+  'vim',
+  'vimdoc',
+}
+
+local treesitter_filetypes = vim.list_extend(vim.deepcopy(treesitter_languages), {
+  'clojurescript',
+  'edn',
+  'javascriptreact',
+  'sh',
+  'typescriptreact',
+})
+
 local function find_upward(startpath, names)
   local found = vim.fs.find(names, {
     path = vim.fs.dirname(startpath),
@@ -218,6 +247,40 @@ local function install_treesitter_query_compat()
   end, opts)
 end
 
+local function start_treesitter(bufnr)
+  if vim.bo[bufnr].buftype ~= '' then
+    return
+  end
+
+  local ok = pcall(vim.treesitter.start, bufnr)
+  if ok then
+    vim.bo[bufnr].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+  end
+end
+
+local function setup_treesitter()
+  install_treesitter_query_compat()
+
+  local treesitter = require 'nvim-treesitter'
+  treesitter.setup {}
+  vim.treesitter.language.register('clojure', { 'clojurescript', 'edn' })
+
+  local group = vim.api.nvim_create_augroup('config-treesitter', { clear = true })
+  vim.api.nvim_create_autocmd('FileType', {
+    group = group,
+    pattern = treesitter_filetypes,
+    callback = function(args)
+      start_treesitter(args.buf)
+    end,
+  })
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr) and vim.tbl_contains(treesitter_filetypes, vim.bo[bufnr].filetype) then
+      start_treesitter(bufnr)
+    end
+  end
+end
+
 return {
   {
     'windwp/nvim-autopairs',
@@ -340,39 +403,7 @@ return {
   {
     'nvim-treesitter/nvim-treesitter',
     build = ':TSUpdate',
-    event = { 'BufReadPost', 'BufNewFile' },
-    main = 'nvim-treesitter.configs',
-    config = function(_, opts)
-      install_treesitter_query_compat()
-      require('nvim-treesitter.configs').setup(opts)
-    end,
-    opts = {
-      ensure_installed = {
-        'bash',
-        'c',
-        'clojure',
-        'diff',
-        'html',
-        'javascript',
-        'jsdoc',
-        'json',
-        'jsonc',
-        'lua',
-        'luadoc',
-        'markdown',
-        'markdown_inline',
-        'query',
-        'tsx',
-        'typescript',
-        'vim',
-        'vimdoc',
-      },
-      auto_install = true,
-      highlight = {
-        enable = true,
-        additional_vim_regex_highlighting = { 'ruby' },
-      },
-      indent = { enable = true, disable = { 'ruby' } },
-    },
+    lazy = false,
+    config = setup_treesitter,
   },
 }
