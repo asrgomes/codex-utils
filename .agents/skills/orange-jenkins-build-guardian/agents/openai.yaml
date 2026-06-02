@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orange Jenkins Build Guardian"
+  short_description: "Resolve, monitor, triage, and fix Falcon Jenkins builds"
+  default_prompt: "Use $orange-jenkins-build-guardian to resolve a Falcon Jenkins build, align the branch and SHA, triage failures, fix locally, push, and wait for the expected commit to go green."
+
+policy:
+  allow_implicit_invocation: true
