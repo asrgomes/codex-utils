@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orange Git Conflict Report"
+  short_description: "Generate dark HTML reviews for Git conflicts"
+  default_prompt: "Use $orange-git-conflict-report to generate merge-conflict-review.html for my current merge conflicts without applying any resolution."
+
+policy:
+  allow_implicit_invocation: true

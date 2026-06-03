@@ -13,6 +13,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -51,6 +52,15 @@ class ProgressiveText:
     more_data: bool
 
 
+@dataclass(frozen=True)
+class CurrentWorktree:
+    repo_root: str
+    repo_name: str
+    branch: str
+    head_sha: str
+    origin_url: str
+
+
 def strip_trailing_slash(value: str) -> str:
     return value.rstrip("/")
 
@@ -67,6 +77,10 @@ def decode_jenkins_segment(segment: str) -> str:
 
 def encode_jenkins_segment(segment: str) -> str:
     return urllib.parse.quote(segment, safe="")
+
+
+def encode_jenkins_branch_segment(segment: str) -> str:
+    return urllib.parse.quote(encode_jenkins_segment(segment), safe="")
 
 
 def join_url_path(base_url: str, path: str) -> str:
@@ -95,6 +109,101 @@ def job_name_to_url(base_url: str, job_name: str) -> tuple[str, list[str], str]:
 
     encoded = "/".join(f"job/{encode_jenkins_segment(segment)}" for segment in segments)
     return "/".join(segments), segments, join_url_path(base_url, encoded)
+
+
+def current_job_to_url(base_url: str, repo_name: str, branch: str) -> tuple[str, list[str], str]:
+    if not repo_name:
+        raise JenkinsError("repository name is empty")
+    if not branch:
+        raise JenkinsError("branch name is empty")
+    segments = [repo_name, branch]
+    path = (
+        f"job/{encode_jenkins_segment(repo_name)}"
+        f"/job/{encode_jenkins_branch_segment(branch)}"
+    )
+    return "/".join(segments), segments, join_url_path(base_url, path)
+
+
+def run_git(repo_root: Path, *args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise JenkinsError("git executable was not found") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        message = f"git {' '.join(args)} failed"
+        if detail:
+            message = f"{message}: {detail}"
+        raise JenkinsError(message) from exc
+    return result.stdout.strip()
+
+
+def repo_name_from_origin(origin_url: str) -> str:
+    value = origin_url.strip()
+    if not value:
+        raise JenkinsError("remote.origin.url is empty")
+
+    if re.match(r"^[^/@:]+@[^:]+:", value):
+        path = value.rsplit(":", 1)[1]
+    else:
+        parsed = urllib.parse.urlsplit(value)
+        path = parsed.path if parsed.scheme else value
+
+    name = Path(path.rstrip("/")).name
+    if name.endswith(".git"):
+        name = name[:-4]
+    if not name:
+        raise JenkinsError(f"could not infer repository name from origin URL: {origin_url}")
+    return name
+
+
+def infer_current_worktree(repo_root: str | None = None, *, require_origin: bool = True) -> CurrentWorktree:
+    requested_root = Path(repo_root or os.getcwd())
+    root = Path(run_git(requested_root, "rev-parse", "--show-toplevel"))
+    branch = run_git(root, "branch", "--show-current")
+    if not branch:
+        raise JenkinsError(
+            f"current worktree is detached at {root}; provide --job-url or --job-name for explicit Jenkins input"
+        )
+    head_sha = run_git(root, "rev-parse", "HEAD").lower()
+    try:
+        origin_url = run_git(root, "config", "--get", "remote.origin.url")
+    except JenkinsError:
+        if require_origin:
+            raise JenkinsError(
+                f"remote.origin.url is missing for current worktree {root}; provide --job-url or --job-name"
+            )
+        origin_url = ""
+    repo_name = repo_name_from_origin(origin_url) if origin_url else ""
+    return CurrentWorktree(
+        repo_root=str(root),
+        repo_name=repo_name,
+        branch=branch,
+        head_sha=head_sha,
+        origin_url=origin_url,
+    )
+
+
+def target_from_current_worktree(
+    worktree: CurrentWorktree,
+    base_url: str,
+    build: int | None = None,
+) -> NormalizedTarget:
+    job_name, segments, job_url = current_job_to_url(base_url, worktree.repo_name, worktree.branch)
+    return NormalizedTarget(
+        base_url=strip_trailing_slash(base_url),
+        job_name=job_name,
+        job_segments=segments,
+        job_url=job_url,
+        build=build,
+        build_url=f"{job_url}/{build}" if build is not None else None,
+    )
 
 
 def parse_jenkins_url(url: str, fallback_base_url: str) -> NormalizedTarget:
@@ -165,7 +274,8 @@ def normalize_target(args: argparse.Namespace) -> NormalizedTarget:
         return normalized
 
     if not args.job_name:
-        raise JenkinsError("provide --job-url or --job-name")
+        worktree = infer_current_worktree(getattr(args, "repo_root", None))
+        return target_from_current_worktree(worktree, base_url, args.build)
     job_name, segments, job_url = job_name_to_url(base_url, args.job_name)
     build = args.build
     return NormalizedTarget(
@@ -363,10 +473,27 @@ def extract_branch_sha(
     *,
     console_text: str = "",
     job_segments: list[str] | None = None,
+    target_branch: str | None = None,
 ) -> dict[str, Any]:
     params = action_parameters(build_json)
     branch_candidates: list[dict[str, str]] = []
     sha_candidates: list[dict[str, str]] = []
+    branch_sha_pairs: list[dict[str, str]] = []
+
+    def add_branch(source: str, value: str) -> str:
+        branch = normalize_branch(value)
+        branch_candidates.append({"source": source, "value": branch})
+        return branch
+
+    def add_sha(source: str, value: str) -> str:
+        sha = value.lower()
+        sha_candidates.append({"source": source, "value": sha})
+        return sha
+
+    def add_pair(source: str, branch: str, sha: str) -> None:
+        branch_sha_pairs.append(
+            {"source": source, "branch": normalize_branch(branch), "sha": sha.lower()}
+        )
 
     branch_keys = {
         "BRANCH_NAME",
@@ -385,58 +512,99 @@ def extract_branch_sha(
         "PULL_REQUEST_SHA",
     }
 
+    param_branches: list[str] = []
+    param_shas: list[str] = []
     for key, value in params.items():
         if key in branch_keys and value:
-            branch_candidates.append({"source": f"parameter:{key}", "value": normalize_branch(value)})
+            param_branches.append(add_branch(f"parameter:{key}", value))
         if key in sha_keys and SHA_RE.fullmatch(value):
-            sha_candidates.append({"source": f"parameter:{key}", "value": value.lower()})
+            param_shas.append(add_sha(f"parameter:{key}", value))
+
+    for branch in param_branches:
+        for sha in param_shas:
+            add_pair("parameters", branch, sha)
+
+    for action_index, action in enumerate(build_json.get("actions") or []):
+        if not isinstance(action, dict):
+            continue
+        revision = action.get("lastBuiltRevision")
+        if not isinstance(revision, dict):
+            continue
+        revision_sha = revision.get("SHA1")
+        valid_sha = isinstance(revision_sha, str) and SHA_RE.fullmatch(revision_sha)
+        if valid_sha:
+            add_sha(f"actions.{action_index}.lastBuiltRevision.SHA1", revision_sha)
+        for branch_index, branch_item in enumerate(revision.get("branch") or []):
+            if not isinstance(branch_item, dict):
+                continue
+            branch_name = branch_item.get("name")
+            if not isinstance(branch_name, str) or not branch_name:
+                continue
+            branch = add_branch(
+                f"actions.{action_index}.lastBuiltRevision.branch.{branch_index}.name",
+                branch_name,
+            )
+            if valid_sha:
+                add_pair("actions.lastBuiltRevision", branch, str(revision_sha))
 
     for path, value in iter_json_values(build_json):
         if not isinstance(value, str):
             continue
         key = path[-1] if path else ""
         if key in branch_keys and value:
-            branch_candidates.append({"source": ".".join(path), "value": normalize_branch(value)})
+            add_branch(".".join(path), value)
         if key in sha_keys and SHA_RE.fullmatch(value):
-            sha_candidates.append({"source": ".".join(path), "value": value.lower()})
+            add_sha(".".join(path), value)
         if key.lower() in {"sha1", "commitid", "revision"} and SHA_RE.fullmatch(value):
-            sha_candidates.append({"source": ".".join(path), "value": value.lower()})
+            add_sha(".".join(path), value)
 
     for item in ((build_json.get("changeSet") or {}).get("items") or []):
         if isinstance(item, dict):
             commit_id = item.get("commitId")
             if isinstance(commit_id, str) and SHA_RE.fullmatch(commit_id):
-                sha_candidates.append({"source": "changeSet.items.commitId", "value": commit_id.lower()})
+                add_sha("changeSet.items.commitId", commit_id)
 
     for match in re.finditer(
         r"Checking out Revision\s+([0-9a-fA-F]{40})(?:\s+\((?:origin/)?([^)]+)\))?",
         console_text,
     ):
-        sha_candidates.append({"source": "console:Checking out Revision", "value": match.group(1).lower()})
+        sha = add_sha("console:Checking out Revision", match.group(1))
         if match.group(2):
-            branch_candidates.append(
-                {"source": "console:Checking out Revision", "value": normalize_branch(match.group(2))}
-            )
+            branch = add_branch("console:Checking out Revision", match.group(2))
+            add_pair("console:Checking out Revision", branch, sha)
 
-    for match in re.finditer(r"Branch(?:es)? Specifier.*?[:=]\s+(?:origin/|\*/)?([^\s]+)", console_text):
-        branch_candidates.append({"source": "console:Branch Specifier", "value": normalize_branch(match.group(1))})
+    for match in re.finditer(
+        r"Branch(?:es)? Specifier.*?[:=]\s+(?:origin/|\*/)?([^\s]+)",
+        console_text,
+    ):
+        add_branch("console:Branch Specifier", match.group(1))
 
     for match in SHA_RE.finditer(console_text):
-        sha_candidates.append({"source": "console:first-sha", "value": match.group(0).lower()})
+        add_sha("console:first-sha", match.group(0))
         break
 
     if job_segments:
         last_segment = normalize_branch(job_segments[-1])
         if last_segment and last_segment.lower() not in {"master", "main", "develop", "trunk"}:
-            branch_candidates.append({"source": "job-url:last-segment", "value": last_segment})
+            add_branch("job-url:last-segment", last_segment)
 
     branch_candidates = dedupe_candidates(branch_candidates)
     sha_candidates = dedupe_candidates(sha_candidates)
+    branch_sha_pairs = dedupe_branch_sha_pairs(branch_sha_pairs)
+    selected_pair = find_branch_sha_pair(branch_sha_pairs, target_branch)
+    branch = selected_pair["branch"] if selected_pair else (
+        branch_candidates[0]["value"] if branch_candidates else None
+    )
+    sha = selected_pair["sha"] if selected_pair else (
+        sha_candidates[0]["value"] if sha_candidates else None
+    )
     return {
-        "branch": branch_candidates[0]["value"] if branch_candidates else None,
-        "sha": sha_candidates[0]["value"] if sha_candidates else None,
+        "branch": branch,
+        "sha": sha,
+        "selected_pair": selected_pair,
         "branch_candidates": branch_candidates[:10],
         "sha_candidates": sha_candidates[:10],
+        "branch_sha_pairs": branch_sha_pairs[:10],
     }
 
 
@@ -450,6 +618,35 @@ def dedupe_candidates(candidates: list[dict[str, str]]) -> list[dict[str, str]]:
         seen.add(key)
         result.append(candidate)
     return result
+
+
+def dedupe_branch_sha_pairs(candidates: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen: set[tuple[str, str, str]] = set()
+    result: list[dict[str, str]] = []
+    for candidate in candidates:
+        key = (
+            candidate.get("source", ""),
+            candidate.get("branch", ""),
+            candidate.get("sha", ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(candidate)
+    return result
+
+
+def find_branch_sha_pair(
+    candidates: list[dict[str, str]],
+    target_branch: str | None,
+) -> dict[str, str] | None:
+    if not target_branch:
+        return None
+    normalized_target = normalize_branch(target_branch)
+    for candidate in candidates:
+        if normalize_branch(candidate.get("branch", "")) == normalized_target:
+            return candidate
+    return None
 
 
 def concise_status(build_json: dict[str, Any], branch_info: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -467,6 +664,100 @@ def concise_status(build_json: dict[str, Any], branch_info: dict[str, Any] | Non
         result["branch"] = branch_info.get("branch")
         result["sha"] = branch_info.get("sha")
     return result
+
+
+def current_green_status(
+    build_json: dict[str, Any],
+    branch_info: dict[str, Any],
+    worktree: CurrentWorktree,
+) -> dict[str, Any]:
+    result = build_json.get("result")
+    building = bool(build_json.get("building"))
+    jenkins_branch = branch_info.get("branch")
+    jenkins_sha = branch_info.get("sha")
+    expected_branch = normalize_branch(worktree.branch)
+    expected_sha = worktree.head_sha.lower()
+
+    if building:
+        green = False
+        reason = "build is still running"
+    elif result != "SUCCESS":
+        green = False
+        reason = f"Jenkins result is {result or 'unknown'}, not SUCCESS"
+    elif normalize_branch(str(jenkins_branch or "")) != expected_branch:
+        green = False
+        reason = (
+            f"Jenkins branch {jenkins_branch or 'unknown'} does not match "
+            f"current branch {expected_branch}"
+        )
+    elif not jenkins_sha:
+        green = False
+        reason = "Jenkins checkout SHA could not be determined"
+    elif str(jenkins_sha).lower() != expected_sha:
+        green = False
+        reason = "Jenkins latest SUCCESS is not green for current HEAD"
+    else:
+        green = True
+        reason = "Jenkins SUCCESS matches current branch and HEAD"
+
+    return {
+        "green": green,
+        "reason": reason,
+        "expected_branch": expected_branch,
+        "expected_sha": expected_sha,
+        "jenkins_branch": jenkins_branch,
+        "jenkins_sha": jenkins_sha,
+        "jenkins_result": result,
+        "jenkins_building": building,
+    }
+
+
+def redact_console_line(line: str) -> str:
+    redacted = re.sub(r"(?i)(authorization:\s*basic\s+)[A-Za-z0-9+/=]+", r"\1<redacted>", line)
+    redacted = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+", r"\1<redacted>", redacted)
+    redacted = re.sub(
+        r"(?i)\b(password|passwd|pwd|token|secret|apikey|api_key)=([^\s&;]+)",
+        r"\1=<redacted>",
+        redacted,
+    )
+    redacted = re.sub(
+        r"(?i)\b(password|passwd|pwd|token|secret|apikey|api_key):\s*([^\s,;]+)",
+        r"\1: <redacted>",
+        redacted,
+    )
+    redacted = re.sub(r"://([^/\s:@]+):([^@/\s]+)@", r"://\1:<redacted>@", redacted)
+    return redacted
+
+
+def console_search_matches(console_text: str) -> list[dict[str, Any]]:
+    patterns: list[tuple[str, re.Pattern[str]]] = [
+        ("revision", re.compile(r".*Checking out Revision\s+[0-9a-fA-F]{40}.*")),
+        ("branch", re.compile(r".*(Branch(?:es)? Specifier|BRANCH_NAME|GIT_BRANCH).*")),
+        ("result", re.compile(r".*(Finished:\s*(SUCCESS|FAILURE|UNSTABLE|ABORTED|NOT_BUILT)|Result:).*")),
+        (
+            "failure",
+            re.compile(r".*(\[ERROR\]|Exception[: ]|AssertionError|FAILURE|Failed tests?:).*"),
+        ),
+    ]
+    matches: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, str]] = set()
+    for line_number, raw_line in enumerate(console_text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        for kind, pattern in patterns:
+            if not pattern.match(line):
+                continue
+            redacted = redact_console_line(line)
+            key = (kind, line_number, redacted)
+            if key in seen:
+                continue
+            seen.add(key)
+            matches.append({"kind": kind, "line": line_number, "text": redacted[:500]})
+            break
+        if len(matches) >= 100:
+            break
+    return matches
 
 
 def collect_test_failures(test_report: dict[str, Any] | None) -> list[str]:
@@ -757,8 +1048,98 @@ def cmd_branch_info(args: argparse.Namespace) -> dict[str, Any]:
         build_json,
         console_text=console_text,
         job_segments=target.job_segments,
+        target_branch=args.target_branch,
     )
     return {"target": asdict(target), "latest": latest, "branch_info": branch_info}
+
+
+def cmd_current_target(args: argparse.Namespace) -> dict[str, Any]:
+    has_explicit_target = bool(args.job_url or args.job_name)
+    worktree = infer_current_worktree(args.repo_root, require_origin=not has_explicit_target)
+    target = (
+        normalize_target(args)
+        if has_explicit_target
+        else target_from_current_worktree(worktree, strip_trailing_slash(args.base_url), args.build)
+    )
+    client = make_client(args)
+    target, latest = with_resolved_build(client, target)
+    build_json = client.get_json(
+        target.build_url,
+        tree=(
+            "number,url,result,building,timestamp,duration,estimatedDuration,fullDisplayName,"
+            "actions[parameters[name,value],lastBuiltRevision[SHA1,branch[name]]],"
+            "changeSet[items[commitId,msg,author[fullName]]]"
+        ),
+    )
+    console_text = read_full_console(
+        client,
+        target.build_url,
+        limit_bytes=args.console_limit_bytes,
+    )
+    branch_info = extract_branch_sha(
+        build_json,
+        console_text=console_text,
+        job_segments=target.job_segments,
+        target_branch=worktree.branch,
+    )
+    status = concise_status(build_json, branch_info)
+    return {
+        "worktree": asdict(worktree),
+        "target": asdict(target),
+        "latest": latest,
+        "latest_build": latest.get("latest") if latest else None,
+        "status": status,
+        "repo_checkout_sha": branch_info.get("sha"),
+        "green_for_current_head": current_green_status(build_json, branch_info, worktree),
+        "branch_info": branch_info,
+    }
+
+
+def cmd_console_search(args: argparse.Namespace) -> dict[str, Any]:
+    target = normalize_target(args)
+    client = make_client(args)
+    target, latest = with_resolved_build(client, target)
+    build_json = client.get_json(
+        target.build_url,
+        tree=(
+            "number,url,result,building,timestamp,duration,estimatedDuration,fullDisplayName,"
+            "actions[parameters[name,value],lastBuiltRevision[SHA1,branch[name]]],"
+            "changeSet[items[commitId,msg,author[fullName]]]"
+        ),
+    )
+    console_text = read_full_console(
+        client,
+        target.build_url,
+        limit_bytes=args.console_limit_bytes,
+    )
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    case_dir = EVIDENCE_ROOT / f"{safe_name(target.job_name)}-{target.build}-console-{stamp}"
+    case_dir.mkdir(parents=True, exist_ok=False)
+    write_json(case_dir / "target.json", asdict(target))
+    write_json(case_dir / "build.json", build_json)
+    if latest:
+        write_json(case_dir / "latest.json", latest)
+    console_path = case_dir / "console.txt"
+    console_path.write_text(console_text, encoding="utf-8")
+
+    branch_info = extract_branch_sha(
+        build_json,
+        console_text=console_text,
+        job_segments=target.job_segments,
+        target_branch=args.target_branch,
+    )
+    matches = console_search_matches(console_text)
+    result = {
+        "target": asdict(target),
+        "latest": latest,
+        "status": concise_status(build_json, branch_info),
+        "branch_info": branch_info,
+        "evidence_dir": str(case_dir),
+        "console_path": str(console_path),
+        "matches": matches[: args.max_matches],
+    }
+    write_json(case_dir / "console_search.json", result)
+    return result
 
 
 def cmd_classify(args: argparse.Namespace) -> dict[str, Any]:
@@ -796,6 +1177,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--job-url", help="Jenkins job URL or build URL")
     parser.add_argument("--job-name", help="Jenkins job name, slash-separated folder path, or /job/<name> path")
     parser.add_argument("--build", type=int, help="Jenkins build number")
+    parser.add_argument("--repo-root", help="Git worktree root to inspect; defaults to the current directory")
     parser.add_argument("--username", help="Oracle email / Jenkins username")
     parser.add_argument("--token-env", default=DEFAULT_TOKEN_ENV, help="Environment variable containing Jenkins token")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Falcon Jenkins base URL")
@@ -807,7 +1189,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Orange/Falcon Jenkins build helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("normalize", "latest", "status", "wait", "tail", "download-failure", "branch-info", "classify"):
+    for name in (
+        "normalize",
+        "latest",
+        "status",
+        "wait",
+        "tail",
+        "download-failure",
+        "branch-info",
+        "current-target",
+        "console-search",
+        "classify",
+    ):
         sub = subparsers.add_parser(name)
         add_common_arguments(sub)
 
@@ -826,6 +1219,15 @@ def build_parser() -> argparse.ArgumentParser:
     branch = subparsers.choices["branch-info"]
     branch.add_argument("--include-console", action="store_true", help="Read console text for extra branch/SHA hints")
     branch.add_argument("--console-limit-bytes", type=int, default=200_000, help="Maximum console bytes to read")
+    branch.add_argument("--target-branch", help="Prefer SHA candidates paired with this branch")
+
+    current = subparsers.choices["current-target"]
+    current.add_argument("--console-limit-bytes", type=int, default=500_000, help="Maximum console bytes to read")
+
+    console = subparsers.choices["console-search"]
+    console.add_argument("--console-limit-bytes", type=int, help="Maximum console bytes to read")
+    console.add_argument("--max-matches", type=int, default=100, help="Maximum redacted matches to return")
+    console.add_argument("--target-branch", help="Prefer SHA candidates paired with this branch")
 
     classify = subparsers.choices["classify"]
     classify.add_argument("--evidence-dir", help="Evidence directory produced by download-failure")
@@ -844,6 +1246,8 @@ def main(argv: list[str] | None = None) -> int:
         "tail": cmd_tail,
         "download-failure": cmd_download_failure,
         "branch-info": cmd_branch_info,
+        "current-target": cmd_current_target,
+        "console-search": cmd_console_search,
         "classify": cmd_classify,
     }
     try:

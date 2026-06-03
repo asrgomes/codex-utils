@@ -44,4 +44,4 @@ Prefer explicit build metadata over console text:
 4. Console lines like `Checking out Revision <sha> (origin/<branch>)`.
 5. The final `/job/<segment>` as a weak branch hint for multibranch jobs.
 
-Always compare the Jenkins branch and SHA with the local branch and `git rev-parse HEAD`. Ask before proceeding if the mismatch changes which branch or commit should be fixed.
+Always compare the Jenkins branch and SHA with the local branch and `git rev-parse HEAD`. Jenkins console output often contains Pipeline library checkouts before the repository checkout; when multiple SHAs appear, prefer the SHA paired with the target repository branch over an earlier library SHA. Ask before proceeding if the mismatch changes which branch or commit should be fixed.

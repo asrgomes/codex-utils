@@ -2,9 +2,9 @@
 
 ## Evidence First
 
-Use independent reads in parallel where possible: `git status`, `git branch --show-current`, `git rev-parse HEAD`, helper `status`, and helper `branch-info` can usually run before editing. Use `multi_tool_use.parallel` for independent file reads and repo/Jenkins evidence collection.
+Use independent reads in parallel where possible: `git status`, `git branch --show-current`, `git rev-parse HEAD`, helper `current-target`, helper `status`, and helper `branch-info` can usually run before editing. Use `current-target` as the first Jenkins read when the user has not supplied an explicit build URL. Use `multi_tool_use.parallel` for independent file reads and repo/Jenkins evidence collection.
 
-Jenkins evidence belongs under `/tmp`, not in the tracked repository. Keep the evidence directory path in progress updates so it can be inspected later.
+Jenkins evidence belongs under `/tmp`, not in the tracked repository. Use `console-search` when a redacted console summary is enough for chat output; it stores the full console under `/tmp/orange-jenkins-build-guardian`. Keep the evidence directory path in progress updates so it can be inspected later.
 
 ## Sandbox And Network
 

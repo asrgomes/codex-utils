@@ -9,9 +9,18 @@ Use this skill to drive a Falcon Jenkins build from "which build?" to "the expec
 
 ## Start Gate
 
+Default to the current worktree as the build target. The primary success condition is:
+
+```text
+the current worktree's current branch and exact HEAD SHA have a Jenkins SUCCESS build
+```
+
+Jenkins success for another branch, another worktree, an older commit, or a Pipeline library checkout SHA does not count. If the user does not provide a Jenkins job name, branch URL, or build URL, infer the target from the current directory's `remote.origin.url` repository basename, `git branch --show-current`, and `git rev-parse HEAD`. Use another checkout only when the user explicitly provides `--repo-root PATH`.
+
 Require enough build identity before doing Jenkins work:
 
-- If no Jenkins job name, branch URL, or build URL is available, ask for one.
+- If no Jenkins job name, branch URL, or build URL is provided, use the current worktree inference path.
+- If the current worktree is detached or lacks `remote.origin.url`, fail clearly unless explicit Jenkins input is provided.
 - If the Jenkins username is unknown, ask for the user's Oracle email.
 - Check that `FALCON_JENKINS_TOKEN` is set without printing it. If it is missing, ask the user to provide it in the environment.
 - Resolve omitted build numbers through the Jenkins API before assuming which build matters.
@@ -34,13 +43,13 @@ Use `scripts/jenkins_build.py` for Jenkins API reads. Prefer it over hand-writte
 12. Wait for the next Jenkins build for the pushed SHA.
 13. Repeat until Jenkins reports `SUCCESS` for the expected branch and commit SHA.
 
-Never declare success until both Jenkins result and expected commit SHA match.
+Never declare success until Jenkins result is `SUCCESS`, the Jenkins repository branch matches the current worktree branch, and the Jenkins repository checkout SHA matches the current worktree `HEAD`. Pipeline library checkout SHAs are common in console output; do not treat them as the final repository match.
 
 ## Ask Gates
 
 Ask the user before proceeding when any of these are true:
 
-- Jenkins job/build input is missing, ambiguous, or has multiple plausible matches.
+- Jenkins job/build input is ambiguous, has multiple plausible matches, or current-worktree inference fails.
 - Jenkins username/email is unknown.
 - Local branch differs from Jenkins branch.
 - Jenkins build SHA differs from local `HEAD` and the next step is unclear.
@@ -79,12 +88,16 @@ python <skill-dir>/scripts/jenkins_build.py --help
 Common commands:
 
 ```bash
+python <skill-dir>/scripts/jenkins_build.py current-target --username "$ORACLE_EMAIL" --json
+python <skill-dir>/scripts/jenkins_build.py console-search --job-url "$BUILD_URL" --username "$ORACLE_EMAIL" --json
 python <skill-dir>/scripts/jenkins_build.py normalize --job-url "$BUILD_URL" --json
 python <skill-dir>/scripts/jenkins_build.py status --job-url "$BUILD_URL" --username "$ORACLE_EMAIL" --json
 python <skill-dir>/scripts/jenkins_build.py wait --job-url "$JOB_URL" --build "$BUILD" --username "$ORACLE_EMAIL" --json
 python <skill-dir>/scripts/jenkins_build.py download-failure --job-url "$BUILD_URL" --username "$ORACLE_EMAIL" --json
 python <skill-dir>/scripts/jenkins_build.py classify --evidence-dir /tmp/orange-jenkins-build-guardian/<case> --json
 ```
+
+Use `current-target` as the default first read. Its `green_for_current_head.green` value is the authoritative answer for whether the current worktree branch and exact `HEAD` are green. Use `console-search` to collect full console evidence under `/tmp/orange-jenkins-build-guardian` while returning only redacted revision, branch, result, and failure lines.
 
 When changing the helper, run:
 
