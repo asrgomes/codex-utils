@@ -1,0 +1,95 @@
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+
+  triggers {
+    cron('H * * * *')
+  }
+
+  parameters {
+    string(
+      name: 'ALM_GIT_CREDENTIALS_ID',
+      defaultValue: '',
+      description: 'Optional Jenkins SSH credential id for ALM Git access. Leave blank when the agent already has Git access.'
+    )
+    string(
+      name: 'SLACK_CHANNEL',
+      defaultValue: '',
+      description: 'Slack channel for drift alerts. When blank, the build still fails but no Slack alert is sent.'
+    )
+  }
+
+  environment {
+    CHECKER = 'jenkins/sfp-release-drift/scripts/sfp_release_drift.py'
+    CONFIG_FILE = 'jenkins/sfp-release-drift/config.toml'
+    REPORT_FILE = 'jenkins/sfp-release-drift/drift-report.md'
+    SLACK_TEXT_FILE = 'jenkins/sfp-release-drift/drift-report-slack.txt'
+  }
+
+  stages {
+    stage('Audit release branch drift') {
+      steps {
+        script {
+          sh '''
+            rm -f "$REPORT_FILE" "$SLACK_TEXT_FILE"
+          '''
+
+          def command = """
+            python3.12 '${env.CHECKER}' -f '${env.CONFIG_FILE}'
+          """.stripIndent().trim()
+
+          int status
+          if (params.ALM_GIT_CREDENTIALS_ID?.trim()) {
+            sshagent(credentials: [params.ALM_GIT_CREDENTIALS_ID.trim()]) {
+              status = sh(script: command, returnStatus: true)
+            }
+          } else {
+            status = sh(script: command, returnStatus: true)
+          }
+
+          env.SFP_RELEASE_DRIFT_STATUS = status.toString()
+
+          if (status != 0) {
+            String slackText = fileExists(env.SLACK_TEXT_FILE)
+              ? readFile(env.SLACK_TEXT_FILE).trim()
+              : "SFP release-branch drift audit failed, but no report was generated."
+
+            if (env.BUILD_URL) {
+              slackText = "${slackText}\n\nBuild: ${env.BUILD_URL}"
+            }
+
+            if (params.SLACK_CHANNEL?.trim()) {
+              try {
+                slackSend(
+                  channel: params.SLACK_CHANNEL.trim(),
+                  color: 'danger',
+                  message: slackText
+                )
+              } catch (err) {
+                echo "Slack alert failed: ${err}"
+              }
+            } else {
+              echo 'SLACK_CHANNEL is blank; skipping Slack alert.'
+            }
+
+            error('SFP release-branch drift audit failed.')
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts(
+        artifacts: 'jenkins/sfp-release-drift/drift-report.md,jenkins/sfp-release-drift/drift-report-slack.txt',
+        allowEmptyArchive: true
+      )
+    }
+  }
+}

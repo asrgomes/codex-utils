@@ -30,17 +30,17 @@ Use `scripts/jenkins_build.py` for Jenkins API reads. Prefer it over hand-writte
 ## Operating Loop
 
 1. Normalize the job/build input and resolve the latest build if needed.
-2. Extract Jenkins branch and build SHA, then compare them with the local branch and `HEAD`.
+2. Extract Jenkins branch and build SHA, including console fallback when metadata is ambiguous, then compare them with the local branch and `HEAD`.
 3. Ask before switching branches, creating worktrees, or continuing from a mismatched branch.
 4. If the build is running, wait with adaptive polling and progressive console reads.
-5. If the build failed, collect evidence in `/tmp`, including job JSON, build JSON, test report, console text, and artifacts.
+5. If the build failed, collect redacted JSON and console evidence in `/tmp`; artifact downloads are bounded by count and byte limits.
 6. Classify the failure before editing.
 7. Reproduce locally with the narrowest useful command.
 8. Ask if reproduction requires starting a DB/service, using new credentials, or leaving the sandbox.
 9. Fix only when the root cause is clear from local reproduction or strong Jenkins evidence.
 10. Review the proposed change for likely security regressions before committing.
 11. Verify locally, run `git diff --check`, commit only intended changes, and push.
-12. Wait for the next Jenkins build for the pushed SHA.
+12. Wait for a Jenkins build that checks out the pushed SHA, scanning recent builds if the latest build is for an older commit.
 13. Repeat until Jenkins reports `SUCCESS` for the expected branch and commit SHA.
 
 Never declare success until Jenkins result is `SUCCESS`, the Jenkins repository branch matches the current worktree branch, and the Jenkins repository checkout SHA matches the current worktree `HEAD`. Pipeline library checkout SHAs are common in console output; do not treat them as the final repository match.
@@ -66,7 +66,7 @@ Ask the user before proceeding when any of these are true:
 
 ## Safety Rules
 
-Do not print or persist Jenkins tokens. Do not write Jenkins evidence into tracked repo paths. Do not use destructive git commands without explicit user approval.
+Do not print Jenkins tokens. Do not write Jenkins evidence into tracked repo paths. Do not use destructive git commands without explicit user approval. Helper JSON output, saved Jenkins JSON, and saved console text are redacted; downloaded artifacts are raw Jenkins artifacts, so keep them under `/tmp`, use `--max-artifacts 0` when artifacts are unnecessary, and do not share artifact contents without inspecting them.
 
 Before committing, check the diff for likely security regressions. In particular, avoid hardcoded secrets, sensitive-data logging, weakened authz/authn, removed validation or escaping, command injection, SQL injection, SSRF, path traversal, unsafe deserialization, XSS, XXE, insecure reflection/scripting, and broader exception swallowing that hides security failures. If a security-relevant change is unavoidable, stop and ask the user to confirm the intended direction.
 
@@ -89,6 +89,7 @@ Common commands:
 
 ```bash
 python <skill-dir>/scripts/jenkins_build.py current-target --username "$ORACLE_EMAIL" --json
+python <skill-dir>/scripts/jenkins_build.py wait-current-head --username "$ORACLE_EMAIL" --json
 python <skill-dir>/scripts/jenkins_build.py console-search --job-url "$BUILD_URL" --username "$ORACLE_EMAIL" --json
 python <skill-dir>/scripts/jenkins_build.py normalize --job-url "$BUILD_URL" --json
 python <skill-dir>/scripts/jenkins_build.py status --job-url "$BUILD_URL" --username "$ORACLE_EMAIL" --json
@@ -97,7 +98,7 @@ python <skill-dir>/scripts/jenkins_build.py download-failure --job-url "$BUILD_U
 python <skill-dir>/scripts/jenkins_build.py classify --evidence-dir /tmp/orange-jenkins-build-guardian/<case> --json
 ```
 
-Use `current-target` as the default first read. Its `green_for_current_head.green` value is the authoritative answer for whether the current worktree branch and exact `HEAD` are green. Use `console-search` to collect full console evidence under `/tmp/orange-jenkins-build-guardian` while returning only redacted revision, branch, result, and failure lines.
+Use `current-target` as the default first read. It scans recent builds for the current worktree branch and exact `HEAD`; its `green_for_current_head.green` value is the authoritative answer for whether the current checkout is green. Use `wait-current-head` after a push so an older latest build cannot be mistaken for the pushed commit. Use `console-search` to collect redacted console evidence under `/tmp/orange-jenkins-build-guardian` while returning only redacted revision, branch, result, and failure lines.
 
 When changing the helper, run:
 

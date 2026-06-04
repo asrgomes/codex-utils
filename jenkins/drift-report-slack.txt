@@ -1,0 +1,116 @@
+SFP release-branch drift audit failed with 32 finding(s).
+
+* mpg [aws_to_oci]: release/26.4.2.0 is missing 5 commits from release/12.4.2.0
+  - b7d6f790 Merge-Request: 27059 from 'merge-release-12.4.0.3-to-release-12.4.2.0' into 'release/12.4.2.0'
+  - d68e6270 Merge branch 'merge-release-12.4.0.3-to-release-12.4.2.0' of ssh://alm.oraclecorp.com/sfp_vm_24182/mpg into merge-release-12.4.0.3-to-release-12.4.2.0
+  - 7153463d 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+  - 157b5478 'Updated POM version to 12.4.2.0-SNAPSHOT before merge to avoid conflicts'
+  - 6293503e 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+* mpg [aws_adjacent]: release/12.4.2.0 is missing 4 commits from release/12.4.1.0
+  - 7932f851 Merge-Request: 26298 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - d2c8a864 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - b3ffc30a 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - f626cd88 Updated POM version to 12.4.1.0-SNAPSHOT after creating release/12.4.1.0 from release/12.4.0.1
+* mpg [aws_adjacent]: release/12.4.1.0 is missing 1 commit from release/12.4.0.3
+  - 36547116 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+* mpg [oci_adjacent]: release/26.4.2.0 is missing 14 commits from release/26.4.1.0
+  - 8c66ee76 Merge-Request: 26311 from 'merge-release-12.4.1.0-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - 97c6e808 'Merge branch release/12.4.1.0-TempMergeSource to merge-release-12.4.1.0-to-release-26.4.1.0'
+  - 69a48844 'Updated POM version to 26.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 85a8dbdc Merge-Request: 26306 from 'merge-release-26.4.0.2-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - 7932f851 Merge-Request: 26298 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - 4cc1065d 'Merge branch release/26.4.0.2-TempMergeSource to merge-release-26.4.0.2-to-release-26.4.1.0'
+  - 4b47fc66 'Updated POM version to 26.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - d2c8a864 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - b3ffc30a 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 690df6a5 Merge-Request: 25938 from 'merge-release-12.4.1.0-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - ... 4 more commits in archived report
+* mpg [oci_adjacent]: release/26.4.1.0 is missing 3 commits from release/26.4.0.3
+  - 52090213 Merge remote-tracking branch 'origin/release/12.4.0.3' into release/26.4.0.3
+  - 7b622535 Updated POM version to 26.4.0.3-SNAPSHOT after creating release/26.4.0.3 from release/26.4.0.2
+  - 36547116 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+* dlq-mgr [aws_to_oci]: release/26.4.2.0 is missing 5 commits from release/12.4.2.0
+  - 0201aee9 Merge-Request: 27058 from 'merge-release-12.4.0.3-to-release-12.4.2.0' into 'release/12.4.2.0'
+  - 38b56b70 Merge branch 'merge-release-12.4.0.3-to-release-12.4.2.0' of ssh://alm.oraclecorp.com/sfp_vm_24182/dlq-mgr into merge-release-12.4.0.3-to-release-12.4.2.0
+  - 238ce496 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+  - 2a7df411 'Updated POM version to 12.4.2.0-SNAPSHOT before merge to avoid conflicts'
+  - bf71d883 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+* dlq-mgr [aws_adjacent]: release/12.4.2.0 is missing 4 commits from release/12.4.1.0
+  - eafa2d1b Merge-Request: 26300 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - ed99483a 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - 937f4ce1 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 10e3f632 Updated POM version to 12.4.1.0-SNAPSHOT after creating release/12.4.1.0 from release/12.4.0.1
+* dlq-mgr [aws_adjacent]: release/12.4.1.0 is missing 1 commit from release/12.4.0.3
+  - 0e4cc633 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+* dlq-mgr [oci_adjacent]: release/26.4.2.0 is missing 14 commits from release/26.4.1.0
+  - ac80d9e1 Merge-Request: 26313 from 'merge-release-12.4.1.0-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - a9ea19ba 'Merge branch release/12.4.1.0-TempMergeSource to merge-release-12.4.1.0-to-release-26.4.1.0'
+  - c69f1942 'Updated POM version to 26.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 953f9667 Merge-Request: 26308 from 'merge-release-26.4.0.2-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - eafa2d1b Merge-Request: 26300 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - 1c079800 'Merge branch release/26.4.0.2-TempMergeSource to merge-release-26.4.0.2-to-release-26.4.1.0'
+  - 67b2fc05 'Updated POM version to 26.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - ed99483a 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - 937f4ce1 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 8923f946 Merge-Request: 25940 from 'merge-release-12.4.1.0-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - ... 4 more commits in archived report
+* dlq-mgr [oci_adjacent]: release/26.4.1.0 is missing 3 commits from release/26.4.0.3
+  - 0470512f Merge remote-tracking branch 'origin/release/12.4.0.3' into release/26.4.0.3
+  - a9c0290c Updated POM version to 26.4.0.3-SNAPSHOT after creating release/26.4.0.3 from release/26.4.0.2
+  - 0e4cc633 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+* vug [aws_to_oci]: release/26.4.2.0 is missing 5 commits from release/12.4.2.0
+  - 1dc9f541 Merge-Request: 27060 from 'merge-release-12.4.0.3-to-release-12.4.2.0' into 'release/12.4.2.0'
+  - 435d1f77 Merge branch 'merge-release-12.4.0.3-to-release-12.4.2.0' of ssh://alm.oraclecorp.com/sfp_vm_24182/vug into merge-release-12.4.0.3-to-release-12.4.2.0
+  - bfcf666c 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+  - 26c5feab 'Updated POM version to 12.4.2.0-SNAPSHOT before merge to avoid conflicts'
+  - 40d15575 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+* vug [aws_adjacent]: release/12.4.2.0 is missing 4 commits from release/12.4.1.0
+  - 82c04d6a Merge-Request: 26299 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - 100d57e9 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - 9372892f 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 96447c0a Updated POM version to 12.4.1.0-SNAPSHOT after creating release/12.4.1.0 from release/12.4.0.1
+* vug [aws_adjacent]: release/12.4.1.0 is missing 1 commit from release/12.4.0.3
+  - 5fe1a187 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+* vug [oci_adjacent]: release/26.4.2.0 is missing 14 commits from release/26.4.1.0
+  - b333c028 Merge-Request: 26307 from 'merge-release-26.4.0.2-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - 2552652c Merge-Request: 26312 from 'merge-release-12.4.1.0-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - be782c4f 'Merge branch release/12.4.1.0-TempMergeSource to merge-release-12.4.1.0-to-release-26.4.1.0'
+  - a604962d 'Updated POM version to 26.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 82c04d6a Merge-Request: 26299 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - a9630693 'Merge branch release/26.4.0.2-TempMergeSource to merge-release-26.4.0.2-to-release-26.4.1.0'
+  - a81b682a 'Updated POM version to 26.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 100d57e9 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - 9372892f 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - 4eca5d57 Merge-Request: 25939 from 'merge-release-12.4.1.0-to-release-26.4.1.0' into 'release/26.4.1.0'
+  - ... 4 more commits in archived report
+* vug [oci_adjacent]: release/26.4.1.0 is missing 3 commits from release/26.4.0.3
+  - c965400c Merge remote-tracking branch 'origin/release/12.4.0.3' into release/26.4.0.3
+  - e8be5ef7 Updated POM version to 26.4.0.3-SNAPSHOT after creating release/26.4.0.3 from release/26.4.0.2
+  - 5fe1a187 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+* vm [aws_to_oci]: release/26.4.2.0 is missing 4 commits from release/12.4.2.0
+  - 44f12db9 Merge-Request: 27061 from 'merge-release-12.4.0.3-to-release-12.4.2.0' into 'release/12.4.2.0'
+  - dbd630ab 'Merge branch release/12.4.0.3-TempMergeSource to merge-release-12.4.0.3-to-release-12.4.2.0'
+  - a00e17b9 'Updated POM version to 12.4.2.0-SNAPSHOT before merge to avoid conflicts'
+  - c2e8c9b7 Merge-Request: 27393 from 'merge-release-12.4.0.0-to-release-12.4.0.3' into 'release/12.4.0.3'
+* vm [aws_to_oci]: release/26.4.0.3 is missing 1 commit from release/12.4.0.3
+  - c2e8c9b7 Merge-Request: 27393 from 'merge-release-12.4.0.0-to-release-12.4.0.3' into 'release/12.4.0.3'
+* vm [aws_to_oci]: release/26.4.0.2 is missing 1 commit from release/12.4.0.2
+  - ec9654f1 Merge-Request: 27093 from 'SFP-82901-aws' into 'release/12.4.0.2'
+* vm [aws_adjacent]: release/12.4.2.0 is missing 4 commits from release/12.4.1.0
+  - 7d262b4a Merge-Request: 26297 from 'merge-release-12.4.0.2-to-release-12.4.1.0' into 'release/12.4.1.0'
+  - 0ae63d0a 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.1.0'
+  - 531aa553 'Updated POM version to 12.4.1.0-SNAPSHOT before merge to avoid conflicts'
+  - c3c685ea Updated POM version to 12.4.1.0-SNAPSHOT after creating release/12.4.1.0 from release/12.4.0.1
+* vm [aws_adjacent]: release/12.4.1.0 is missing 254 commits from release/12.4.0.3
+  - c2e8c9b7 Merge-Request: 27393 from 'merge-release-12.4.0.0-to-release-12.4.0.3' into 'release/12.4.0.3'
+  - b0d149d4 Merge fixes
+  - 370a9a60 'Merge branch release/12.4.0.0-TempMergeSource to merge-release-12.4.0.0-to-release-12.4.0.3'
+  - 94d82b9d Merge-Request: 27334 from 'merge-release-12.4.0.2-to-release-12.4.0.3' into 'release/12.4.0.3'
+  - dd29c69e 'Merge branch release/12.4.0.2-TempMergeSource to merge-release-12.4.0.2-to-release-12.4.0.3'
+  - 1ea3b921 'Updated POM version to 12.4.0.3-SNAPSHOT before merge to avoid conflicts'
+  - ec9654f1 Merge-Request: 27093 from 'SFP-82901-aws' into 'release/12.4.0.2'
+  - dd6b57f0 SFP-82901 Use exact ISIR config for discrepancy corrections
+  - ebee4557 Updated POM version to 12.4.0.3-SNAPSHOT after creating release/12.4.0.3 from release/12.4.0.2
+  - 04ca1b2a Merge-Request: 26814 from 'SFP-82721-aws' into 'release/12.4.0.2'
+  - ... 244 more commits in archived report
+* ... 12 more finding(s) in archived report

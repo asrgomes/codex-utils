@@ -1,0 +1,70 @@
+- Context Summary
+  - Systems
+    - You manage CI (Continuous Integration) for a multi-repository application.
+    - Git hosting is handled by ALM (Application Lifecycle Management), an Oracle-owned service.
+    - ALM provides:
+      - Git repositories
+      - Access control
+      - MRs (Merge Requests)
+    - CI runs on a Jenkins server managed by your team.
+    - Jenkins monitors ALM and triggers builds.
+    - Each Jenkins job is named after the corresponding ALM Git repository.
+  - Repository and Build Model
+    - The application is made of many Git repositories.
+    - Some repositories version independently.
+    - Other repositories move in lockstep with the main application version.
+    - Build management uses Maven.
+    - The project does not use Git tags.
+    - Versions remain as Maven `SNAPSHOT` versions for convenience.
+  - Versioning
+    - Application versions use a four-number format.
+    - Examples:
+      - `12.4.0.3`
+      - `26.4.0.3`
+    - Infrastructure mapping:
+      - `12.x.x.x` through `19.x.x.x` are AWS (Amazon Web Services) versions.
+      - `26.x.x.x` and higher are OCI (Oracle Cloud Infrastructure) versions.
+    - Unless stated otherwise, AWS and OCI versions are developed in lockstep.
+    - Example pair:
+      - `12.4.0.3` <-> `26.4.0.3`
+  - Release Branches
+    - Each version has a dedicated release branch.
+    - Naming pattern:
+      - `release/<VERSION>`
+    - Examples:
+      - `release/12.4.0.3`
+      - `release/26.4.0.3`
+    - Core invariant:
+      - The OCI release branch must contain all commits from the matching AWS release branch.
+    - Example:
+      - `release/26.4.0.3` should include all commits from `release/12.4.0.3`.
+  - Feature Branches
+    - Developers work on temporary feature branches.
+    - Branches are named after the Jira ticket plus infrastructure suffix.
+    - Naming pattern:
+      - `<TICKET>-aws`
+      - `<TICKET>-oci`
+    - Example ticket identifiers:
+      - `SFP-81830-aws`
+      - `SFP-81830-oci`
+    - Feature branches are reviewed through ALM MRs.
+    - After approval, feature branches are merged into release branches.
+  - Feature Branch Rules
+    - OCI-only changes:
+      - Use only `<TICKET>-oci`.
+    - AWS-only changes:
+      - Require both `<TICKET>-aws` and `<TICKET>-oci`.
+    - AWS and OCI changes:
+      - Require both `<TICKET>-aws` and `<TICKET>-oci`.
+    - OCI feature branches must never be behind their matching AWS feature branches.
+    - When both branches exist, they should be merged at the same time.
+  - Operational Chain
+    - For a normal change:
+      - ALM repository
+      - feature branch
+      - target release branch
+      - ALM MR
+      - Jenkins CI job/build
+    - For paired AWS and OCI work:
+      - The operational chain exists on both sides.
+      - The OCI side must stay caught up with the AWS side.

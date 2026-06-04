@@ -4,7 +4,7 @@
 
 Use independent reads in parallel where possible: `git status`, `git branch --show-current`, `git rev-parse HEAD`, helper `current-target`, helper `status`, and helper `branch-info` can usually run before editing. Use `current-target` as the first Jenkins read when the user has not supplied an explicit build URL. Use `multi_tool_use.parallel` for independent file reads and repo/Jenkins evidence collection.
 
-Jenkins evidence belongs under `/tmp`, not in the tracked repository. Use `console-search` when a redacted console summary is enough for chat output; it stores the full console under `/tmp/orange-jenkins-build-guardian`. Keep the evidence directory path in progress updates so it can be inspected later.
+Jenkins evidence belongs under `/tmp`, not in the tracked repository. Use `console-search` when a redacted console summary is enough for chat output; it stores redacted console text under `/tmp/orange-jenkins-build-guardian`. Use `download-failure` for failed builds, with lower `--max-artifacts`, `--max-artifact-bytes`, or `--max-total-artifact-bytes` values when large/raw artifacts are unnecessary. Keep the evidence directory path in progress updates so it can be inspected later.
 
 ## Sandbox And Network
 
@@ -27,7 +27,7 @@ Commit only intended changes. Before committing, run focused verification, `git 
 
 ## Progress Updates
 
-During long waits, provide short updates with build number, result/building state, elapsed time, and whether the expected SHA has appeared. Do not end the turn while a required poll, test, push, or Jenkins wait command is still running.
+During long waits, provide short updates with build number, result/building state, elapsed time, and whether the expected SHA has appeared. After a push, use `wait-current-head` so the loop waits for the build that checked out the exact local `HEAD`, not merely the latest build on the branch. Do not end the turn while a required poll, test, push, or Jenkins wait command is still running.
 
 ## Stop Conditions
 

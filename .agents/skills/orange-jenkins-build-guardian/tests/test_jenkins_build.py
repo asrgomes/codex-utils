@@ -1,6 +1,8 @@
 import argparse
 import importlib.util
+import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -65,6 +67,116 @@ class FakeStatusClient:
             "x-text-size": str(len(self.console_text.encode("utf-8"))),
             "x-more-data": "false",
         }
+
+
+class FakeDownloadClient:
+    def __init__(self, build_json, console_text, test_report=None, artifact_data=b"artifact"):
+        self.build_json = build_json
+        self.console_text = console_text
+        self.test_report = test_report if test_report is not None else {"suites": []}
+        self.artifact_data = artifact_data
+        self.calls = []
+
+    def get_json(self, url, tree=None):
+        self.calls.append((url, tree))
+        if url.endswith("/testReport"):
+            return self.test_report
+        if url.endswith("/42"):
+            return {**self.build_json, "url": url}
+        return {
+            "name": "vm",
+            "url": "https://hed.sfp.ocs.oc-test.com/falcon/job/vm/job/feature%252Fdemo",
+            "lastBuild": {
+                "number": 42,
+                "url": "https://hed.sfp.ocs.oc-test.com/falcon/job/vm/job/feature%252Fdemo/42/",
+                "result": self.build_json.get("result"),
+                "building": self.build_json.get("building"),
+            },
+            "builds": [
+                {
+                    "number": 42,
+                    "url": "https://hed.sfp.ocs.oc-test.com/falcon/job/vm/job/feature%252Fdemo/42/",
+                    "result": self.build_json.get("result"),
+                    "building": self.build_json.get("building"),
+                }
+            ],
+        }
+
+    def get_text(self, url, params=None):
+        self.calls.append((url, params))
+        return self.console_text, {
+            "x-text-size": str(len(self.console_text.encode("utf-8"))),
+            "x-more-data": "false",
+        }
+
+    def get_binary(self, url, max_bytes=None):
+        self.calls.append((url, max_bytes))
+        if max_bytes is not None and len(self.artifact_data) > max_bytes:
+            raise jenkins_build.JenkinsError("artifact too large")
+        return self.artifact_data
+
+
+class FakeRecentBuildClient:
+    def __init__(self, builds):
+        self.builds = builds
+        self.calls = []
+        self.job_url = "https://hed.sfp.ocs.oc-test.com/falcon/job/vm/job/feature%252Fdemo"
+
+    def get_json(self, url, tree=None):
+        self.calls.append((url, tree))
+        for number, build_json, _console in self.builds:
+            if url.rstrip("/").endswith(f"/{number}"):
+                return {**build_json, "number": number, "url": f"{self.job_url}/{number}"}
+        latest_number, latest_json, _console = self.builds[0]
+        return {
+            "name": "vm",
+            "url": self.job_url,
+            "lastBuild": {
+                "number": latest_number,
+                "url": f"{self.job_url}/{latest_number}/",
+                "result": latest_json.get("result"),
+                "building": latest_json.get("building"),
+            },
+            "builds": [
+                {
+                    "number": number,
+                    "url": f"{self.job_url}/{number}/",
+                    "result": build_json.get("result"),
+                    "building": build_json.get("building"),
+                }
+                for number, build_json, _console in self.builds
+            ],
+        }
+
+    def get_text(self, url, params=None):
+        self.calls.append((url, params))
+        for number, _build_json, console in self.builds:
+            if f"/{number}/" in url:
+                return console, {
+                    "x-text-size": str(len(console.encode("utf-8"))),
+                    "x-more-data": "false",
+                }
+        return "", {"x-text-size": "0", "x-more-data": "false"}
+
+
+class FakeHTTPResponse:
+    def __init__(self, data=b"{}"):
+        self.data = data
+        self.offset = 0
+        self.headers = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc, _tb):
+        return False
+
+    def read(self, size=-1):
+        if size is None or size < 0:
+            size = len(self.data) - self.offset
+        chunk = self.data[self.offset : self.offset + size]
+        self.offset += len(chunk)
+        return chunk
 
 
 class JenkinsBuildHelperTest(unittest.TestCase):
@@ -389,6 +501,286 @@ class JenkinsBuildHelperTest(unittest.TestCase):
         self.assertNotIn("abc123", text)
         self.assertNotIn("supersecret", text)
         self.assertNotIn("dontprint", text)
+
+    def test_redact_url_removes_query_and_userinfo(self):
+        redacted = jenkins_build.redact_url(
+            "https://codex:secret@example.com:8443/job/demo/42/api/json?token=secret"
+        )
+
+        self.assertEqual(redacted, "https://<redacted>@example.com:8443/job/demo/42/api/json")
+        self.assertNotIn("secret", redacted)
+        self.assertNotIn("token", redacted)
+
+    def test_redact_json_preserves_author_and_redacts_secret_parameters(self):
+        data = {
+            "changeSet": {
+                "items": [
+                    {
+                        "author": {"fullName": "Ada Lovelace"},
+                        "msg": "Build fix",
+                    }
+                ]
+            },
+            "actions": [
+                {
+                    "parameters": [
+                        {"name": "API_TOKEN", "value": "supersecretvalue"},
+                        {"name": "BRANCH_NAME", "value": "feature/demo"},
+                    ]
+                }
+            ],
+        }
+
+        redacted = jenkins_build.redact_json_value(data)
+
+        self.assertEqual(redacted["changeSet"]["items"][0]["author"]["fullName"], "Ada Lovelace")
+        self.assertEqual(redacted["actions"][0]["parameters"][0]["value"], "<redacted>")
+        self.assertEqual(redacted["actions"][0]["parameters"][1]["value"], "feature/demo")
+
+    def test_read_full_console_respects_limit_bytes(self):
+        client = FakeStatusClient({}, "abcdef")
+
+        console = jenkins_build.read_full_console(
+            client,
+            "https://hed.sfp.ocs.oc-test.com/falcon/job/example/42",
+            limit_bytes=3,
+        )
+
+        self.assertEqual(console, "abc")
+
+    def test_read_full_console_zero_limit_does_not_fetch(self):
+        client = FakeStatusClient({}, "abcdef")
+
+        console = jenkins_build.read_full_console(
+            client,
+            "https://hed.sfp.ocs.oc-test.com/falcon/job/example/42",
+            limit_bytes=0,
+        )
+
+        self.assertEqual(console, "")
+        self.assertEqual(client.calls, [])
+
+    def test_download_failure_writes_redacted_evidence(self):
+        secret = "supersecretvalue"
+        os.environ["JENKINS_TEST_TOKEN"] = secret
+        build_json = {
+            "number": 42,
+            "result": "FAILURE",
+            "building": False,
+            "actions": [
+                {
+                    "parameters": [
+                        {"name": "API_TOKEN", "value": secret},
+                        {"name": "BRANCH_NAME", "value": "feature/demo"},
+                    ]
+                }
+            ],
+            "changeSet": {"items": []},
+            "artifacts": [{"fileName": "log.txt", "relativePath": "logs/log.txt"}],
+        }
+        console = f"[ERROR] token={secret} password: dontprint\nFinished: FAILURE\n"
+        client = FakeDownloadClient(build_json, console)
+        old_make_client = jenkins_build.make_client
+        old_evidence_root = jenkins_build.EVIDENCE_ROOT
+        jenkins_build.make_client = lambda args: client
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                jenkins_build.EVIDENCE_ROOT = Path(tmp)
+                args = argparse.Namespace(
+                    base_url=jenkins_build.DEFAULT_BASE_URL,
+                    job_url="https://hed.sfp.ocs.oc-test.com/falcon/job/vm/job/feature%252Fdemo/42/",
+                    job_name=None,
+                    build=None,
+                    repo_root=None,
+                    username="user@example.com",
+                    token_env="JENKINS_TEST_TOKEN",
+                    timeout=30,
+                    retries=0,
+                    retry_backoff_seconds=0,
+                    max_artifacts=20,
+                    max_artifact_bytes=100,
+                    max_total_artifact_bytes=100,
+                    console_limit_bytes=jenkins_build.DEFAULT_CONSOLE_LIMIT,
+                )
+
+                result = jenkins_build.cmd_download_failure(args)
+
+                evidence_dir = Path(result["evidence_dir"])
+                console_text = (evidence_dir / "console.txt").read_text(encoding="utf-8")
+                build_text = (evidence_dir / "build.json").read_text(encoding="utf-8")
+                classification_text = (evidence_dir / "classification.json").read_text(encoding="utf-8")
+
+                self.assertNotIn(secret, console_text)
+                self.assertNotIn(secret, build_text)
+                self.assertNotIn(secret, classification_text)
+                self.assertIn("<redacted>", console_text)
+                self.assertIn("<redacted>", build_text)
+        finally:
+            jenkins_build.make_client = old_make_client
+            jenkins_build.EVIDENCE_ROOT = old_evidence_root
+            os.environ.pop("JENKINS_TEST_TOKEN", None)
+
+    def test_current_target_scans_recent_builds_for_current_head(self):
+        tmp, root, head = self.make_repo()
+        old_sha = "e" * 40
+        client = FakeRecentBuildClient(
+            [
+                (
+                    45,
+                    {"result": "SUCCESS", "building": False, "actions": [], "changeSet": {"items": []}},
+                    f"Checking out Revision {old_sha} (origin/feature/demo)\nFinished: SUCCESS\n",
+                ),
+                (
+                    44,
+                    {"result": "SUCCESS", "building": False, "actions": [], "changeSet": {"items": []}},
+                    f"Checking out Revision {head} (origin/feature/demo)\nFinished: SUCCESS\n",
+                ),
+            ]
+        )
+        old_make_client = jenkins_build.make_client
+        jenkins_build.make_client = lambda args: client
+        try:
+            with tmp:
+                args = argparse.Namespace(
+                    base_url=jenkins_build.DEFAULT_BASE_URL,
+                    job_url=None,
+                    job_name=None,
+                    build=None,
+                    repo_root=str(root),
+                    username="user@example.com",
+                    token_env=jenkins_build.DEFAULT_TOKEN_ENV,
+                    timeout=30,
+                    console_limit_bytes=jenkins_build.DEFAULT_CONSOLE_LIMIT,
+                    scan_builds=10,
+                )
+
+                result = jenkins_build.cmd_current_target(args)
+        finally:
+            jenkins_build.make_client = old_make_client
+
+        self.assertTrue(result["green_for_current_head"]["green"])
+        self.assertEqual(result["matching_build"]["number"], 44)
+        self.assertEqual(result["status"]["number"], 44)
+        self.assertEqual([build["number"] for build in result["checked_builds"]], [45, 44])
+
+    def test_wait_current_head_returns_completed_matching_build(self):
+        tmp, root, head = self.make_repo()
+        client = FakeRecentBuildClient(
+            [
+                (
+                    46,
+                    {"result": "SUCCESS", "building": False, "actions": [], "changeSet": {"items": []}},
+                    f"Checking out Revision {head} (origin/feature/demo)\nFinished: SUCCESS\n",
+                )
+            ]
+        )
+        old_make_client = jenkins_build.make_client
+        jenkins_build.make_client = lambda args: client
+        try:
+            with tmp:
+                args = argparse.Namespace(
+                    base_url=jenkins_build.DEFAULT_BASE_URL,
+                    job_url=None,
+                    job_name=None,
+                    build=None,
+                    repo_root=str(root),
+                    username="user@example.com",
+                    token_env=jenkins_build.DEFAULT_TOKEN_ENV,
+                    timeout=30,
+                    console_limit_bytes=jenkins_build.DEFAULT_CONSOLE_LIMIT,
+                    scan_builds=10,
+                    interval=0,
+                    max_interval=0,
+                    max_wait_seconds=1,
+                )
+
+                result = jenkins_build.cmd_wait_current_head(args)
+        finally:
+            jenkins_build.make_client = old_make_client
+
+        self.assertEqual(result["matching_build"]["number"], 46)
+        self.assertTrue(result["green_for_current_head"]["green"])
+        self.assertEqual(result["polls"], 1)
+
+    def test_client_retries_transient_http_errors(self):
+        os.environ.pop("JENKINS_TEST_TOKEN_MISSING", None)
+        old_urlopen = jenkins_build.urllib.request.urlopen
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            if len(calls) == 1:
+                raise jenkins_build.urllib.error.HTTPError(
+                    request.full_url,
+                    500,
+                    "server error",
+                    {},
+                    io.BytesIO(b""),
+                )
+            return FakeHTTPResponse(b"ok")
+
+        jenkins_build.urllib.request.urlopen = fake_urlopen
+        try:
+            client = jenkins_build.JenkinsClient(
+                None,
+                "JENKINS_TEST_TOKEN_MISSING",
+                retries=1,
+                retry_backoff_seconds=0,
+            )
+            data, _headers = client.request("https://example.com/job/demo")
+        finally:
+            jenkins_build.urllib.request.urlopen = old_urlopen
+
+        self.assertEqual(data, b"ok")
+        self.assertEqual(len(calls), 2)
+
+    def test_client_does_not_retry_auth_errors(self):
+        os.environ.pop("JENKINS_TEST_TOKEN_MISSING", None)
+        old_urlopen = jenkins_build.urllib.request.urlopen
+        calls = []
+
+        def fake_urlopen(request, timeout):
+            calls.append((request, timeout))
+            raise jenkins_build.urllib.error.HTTPError(
+                request.full_url,
+                403,
+                "forbidden",
+                {},
+                io.BytesIO(b""),
+            )
+
+        jenkins_build.urllib.request.urlopen = fake_urlopen
+        try:
+            client = jenkins_build.JenkinsClient(
+                None,
+                "JENKINS_TEST_TOKEN_MISSING",
+                retries=3,
+                retry_backoff_seconds=0,
+            )
+            with self.assertRaisesRegex(jenkins_build.JenkinsError, "HTTP 403"):
+                client.request("https://example.com/job/demo")
+        finally:
+            jenkins_build.urllib.request.urlopen = old_urlopen
+
+        self.assertEqual(len(calls), 1)
+
+    def test_wait_current_head_parser_options(self):
+        parser = jenkins_build.build_parser()
+        args = parser.parse_args(
+            [
+                "wait-current-head",
+                "--username",
+                "user@example.com",
+                "--scan-builds",
+                "7",
+                "--max-wait-seconds",
+                "1",
+            ]
+        )
+
+        self.assertEqual(args.command, "wait-current-head")
+        self.assertEqual(args.scan_builds, 7)
+        self.assertEqual(args.max_wait_seconds, 1)
 
 
 if __name__ == "__main__":

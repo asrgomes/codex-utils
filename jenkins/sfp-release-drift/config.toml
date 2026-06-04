@@ -1,0 +1,39 @@
+# If script should be verbose
+verbose = false
+
+# Temporary folder used to clone repositories (will be created automatically)
+tmp_dir = "/tmp/drift"
+
+# Max number of past versions to consider
+max_versions = 5
+
+# Ignore verified metadata-only merge request drift commits
+ignore_non_material_commits = true
+
+# Target branches whose drift findings should be suppressed
+# Example: suppressed_branches = ["release/26.4.1.0"]
+suppressed_branches = [
+    "release/12.4.2.0",
+    "release/26.4.2.0",
+    "release/12.4.1.0",
+    "release/26.4.1.0",
+]
+
+# All repositories to scan (only SSH URLs allowed)
+repositories = [
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/mpg.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/dlq-mgr.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/vug.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/vm.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/sfp-customer-configurator.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/sfp-audit-logging.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/sfp-3pl-approval.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/sfp-shared.git",
+    "ssh://alm.oraclecorp.com/sfp_vm_24182/student-portal.git",
+]
+
+# Where to write detailed report (must end with ".md")
+output_report_file = "drift-report.md"
+
+# Optional Slack summary text file used by the Jenkins pipeline
+slack_text_file = "drift-report-slack.txt"
