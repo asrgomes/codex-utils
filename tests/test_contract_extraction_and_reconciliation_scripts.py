@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIR = ROOT / "skills" / "contract-extraction-and-reconciliaton"
+SKILL_DIR = ROOT / ".agents" / "skills" / "contract-extraction-and-reconciliation"
 SCRIPTS = SKILL_DIR / "scripts"
 
 
@@ -427,6 +427,11 @@ def test_unchanged_rank_does_not_stop_before_max_iterations(tmp_path):
         iteration=1,
         replay_seeds=["seed-1"],
         candidate_outcomes=["rejected candidate from seed-1"],
+        contracts_dir=tmp_path,
+        boundary_inventory=None,
+        stop_policy="iteration",
+        coverage_target="production-spec",
+        completion_min_score=8,
     )
     second = contract_index.build_result(
         contracts,
@@ -437,6 +442,11 @@ def test_unchanged_rank_does_not_stop_before_max_iterations(tmp_path):
         iteration=2,
         replay_seeds=["seed-2"],
         candidate_outcomes=[],
+        contracts_dir=tmp_path,
+        boundary_inventory=None,
+        stop_policy="iteration",
+        coverage_target="production-spec",
+        completion_min_score=8,
     )
 
     assert second["convergence"]["rank_changed"] is False
@@ -457,6 +467,11 @@ def test_stop_condition_is_max_iterations_only(tmp_path):
         iteration=1,
         replay_seeds=["seed-1"],
         candidate_outcomes=["rejected candidate from seed-1"],
+        contracts_dir=tmp_path,
+        boundary_inventory=None,
+        stop_policy="iteration",
+        coverage_target="production-spec",
+        completion_min_score=8,
     )
     second = contract_index.build_result(
         contracts,
@@ -467,6 +482,11 @@ def test_stop_condition_is_max_iterations_only(tmp_path):
         iteration=2,
         replay_seeds=["seed-2"],
         candidate_outcomes=["rejected candidate from seed-2"],
+        contracts_dir=tmp_path,
+        boundary_inventory=None,
+        stop_policy="iteration",
+        coverage_target="production-spec",
+        completion_min_score=8,
     )
     third = contract_index.build_result(
         contracts,
@@ -477,6 +497,11 @@ def test_stop_condition_is_max_iterations_only(tmp_path):
         iteration=3,
         replay_seeds=["seed-3"],
         candidate_outcomes=["rejected candidate from seed-3"],
+        contracts_dir=tmp_path,
+        boundary_inventory=None,
+        stop_policy="iteration",
+        coverage_target="production-spec",
+        completion_min_score=8,
     )
 
     assert third["convergence"]["stop"] is True
@@ -488,7 +513,7 @@ def test_skill_definition_mentions_contract_reconciliation_support():
     openai_text = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8").lower()
 
     assert "extract and reconcile" in skill_text
-    assert "name: contract-extraction-and-reconciliaton" in skill_text
+    assert "name: contract-extraction-and-reconciliation" in skill_text
     assert "reconciliation" in skill_text
     assert "reconcile" in openai_text
 

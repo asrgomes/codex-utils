@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-MATCHER_VERSION = "boundary-inventory-v2"
+MATCHER_VERSION = "boundary-inventory-v4"
 INVENTORY_NAME = ".boundary-inventory.json"
 SKIP_PARTS = {".git", "target", "node_modules", ".idea", ".gradle", "build", "dist", "__pycache__"}
 TEXT_EXTENSIONS = {
@@ -395,8 +395,29 @@ def detect_source_boundaries(source: SourceFile, profile: dict) -> list[dict]:
 def evidence_role_for(rel: str, text: str) -> str:
     lowered = rel.lower()
     parts = set(Path(lowered).parts)
+    ordered_parts = Path(lowered).parts
     name = Path(lowered).name
     suffix = Path(lowered).suffix
+    first_part = ordered_parts[0] if ordered_parts else ""
+    if (
+        first_part in {"brainstorm", ".opencode", ".superpowers"}
+        or "generated" in parts
+        or "superpowers" in parts
+        or name.startswith("learn_")
+        or lowered in {
+            "future.md",
+            "improvement-plan.md",
+            "plan.md",
+            "prompt.md",
+            "tasks/lessons.md",
+            "wayland-cursor-issue.md",
+        }
+        or (
+            first_part in {"tools", "scripts"}
+            and any(marker in name for marker in ("smoke", "whitelist", "fixture", "harness"))
+        )
+    ):
+        return "support_code"
     if suffix in {".md", ".txt"} and any(part in parts for part in ("docs", "doc", "adr", "specs")):
         return "spec_anchor"
     if (

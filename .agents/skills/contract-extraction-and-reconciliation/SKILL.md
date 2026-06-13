@@ -1,5 +1,5 @@
 ---
-name: contract-extraction-and-reconciliaton
+name: contract-extraction-and-reconciliation
 description:
   Use when Codex is asked to identify integration boundaries, extract or reconcile local repository
   or specification behavior as evidence-backed contract markdown, score contract quality, build a
@@ -7,7 +7,7 @@ description:
   covered.
 ---
 
-# Contract Extraction and Reconciliaton
+# Contract Extraction and Reconciliation
 
 ## Purpose
 
@@ -146,10 +146,11 @@ such as `src/main`. Use these files to reveal interactions, negative cases, fixt
 anchor contracts to production source or local specs unless the contract is explicitly about test
 infrastructure.
 
-When the runtime policy and the user explicitly allow agent delegation, run independent agents in
-parallel for disjoint worktree, ecosystem, boundary, depth, reconciliation, or critic slices. Keep
-each write scope independent and have the coordinating agent integrate results into final contract
-files, `INDEX.md`, `COVERAGE.md`, and `.contract-state.json` to avoid write conflicts.
+When the runtime policy and the user explicitly allow agent delegation, run multiple agents
+concurrently as independent workers for disjoint worktree, ecosystem, boundary, depth, reconciliation, alternative,
+or critic slices. Keep each write scope independent and have the coordinating agent integrate
+results into final contract files, `INDEX.md`, `COVERAGE.md`, and `.contract-state.json` to avoid
+write conflicts.
 
 ### Frontier Model
 
@@ -200,7 +201,7 @@ Every iteration follows this order:
 5. Draft or refresh embryonic candidates from the selected seeds and retained population. Good
    groups have one coherent purpose, clear actors, inputs, pre-conditions, outputs,
    post-conditions, invariants, behavior, alternative paths, evidence, and validation. When a seed is
-   a source location, identify plausible code paths that hit it before proposing the contract
+   a source-code location, identify plausible code paths that hit it before proposing the contract
    boundary. Trace inbound caller trees, outbound callee trees, or both, depending on which direction
    explains the value-delivering interaction. Record untraced branches as gaps or rejected candidate
    notes.
@@ -282,7 +283,7 @@ specification inference, and testable like agent behavioral contracts.
 Create a deterministic project/file inventory:
 
 ```bash
-python3 skills/contract-extraction-and-reconciliaton/scripts/repo_inventory.py \
+python3 skills/contract-extraction-and-reconciliation/scripts/repo_inventory.py \
   --repo . \
   --spec README.md \
   --profile \
@@ -292,7 +293,7 @@ python3 skills/contract-extraction-and-reconciliaton/scripts/repo_inventory.py \
 Create or refresh the reusable boundary inventory:
 
 ```bash
-python3 skills/contract-extraction-and-reconciliaton/scripts/boundary_inventory.py \
+python3 skills/contract-extraction-and-reconciliation/scripts/boundary_inventory.py \
   --repo . \
   --contracts contracts \
   --reuse \
@@ -302,7 +303,7 @@ python3 skills/contract-extraction-and-reconciliaton/scripts/boundary_inventory.
 Select boundary-backed candidate seeds:
 
 ```bash
-python3 skills/contract-extraction-and-reconciliaton/scripts/candidate_seeds.py \
+python3 skills/contract-extraction-and-reconciliation/scripts/candidate_seeds.py \
   --repo . \
   --spec README.md \
   --contracts contracts \
@@ -317,7 +318,7 @@ python3 skills/contract-extraction-and-reconciliaton/scripts/candidate_seeds.py 
 Add blind random breadth only when explicitly needed:
 
 ```bash
-python3 skills/contract-extraction-and-reconciliaton/scripts/candidate_seeds.py \
+python3 skills/contract-extraction-and-reconciliation/scripts/candidate_seeds.py \
   --repo . \
   --contracts contracts \
   --count 12 \
@@ -327,7 +328,7 @@ python3 skills/contract-extraction-and-reconciliaton/scripts/candidate_seeds.py 
 Score and index contracts:
 
 ```bash
-python3 skills/contract-extraction-and-reconciliaton/scripts/contract_index.py contracts \
+python3 skills/contract-extraction-and-reconciliation/scripts/contract_index.py contracts \
   --coverage contracts/COVERAGE.md \
   --state contracts/.contract-state.json \
   --stop-policy exhaustive \

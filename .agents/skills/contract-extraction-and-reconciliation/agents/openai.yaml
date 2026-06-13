@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contract Extraction and Reconciliation"
+  short_description: "Extract and reconcile exhaustive source-anchored contract frontiers"
+  default_prompt: "Collect worktree paths, contracts folder, min_contracts, stop_policy, coverage_target, and completion_min_score. For exhaustive runs, keep iterating from durable state until the coverage frontier is complete: all required active boundaries covered, no referenced stale boundaries, retained contracts meet the score gate, no actor gaps, no merge/split/drop candidates, and no unresolved coverage gaps. Profile worktrees, build/reuse .boundary-inventory.json, select frontier-first seeds, treat tests as validation signals, preserve stable-covered contracts with only minor adjustments, use the 5%-of-top drop rule bounded by minimum retained count, run authorized parallel agents only on disjoint slices, write INDEX/COVERAGE/state each iteration, and summarize stop reason."

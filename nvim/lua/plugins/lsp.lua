@@ -52,13 +52,13 @@ return {
       },
     },
     config = function()
-      local java_21_home = vim.fn.expand '~/tools/jdk-21'
-      local java_21_bin = java_21_home .. '/bin'
+      local java_25_home = vim.fn.expand '~/.sdkman/candidates/java/current'
+      local java_25_bin = java_25_home .. '/bin'
 
       require('java').setup {
         jdk = {
           auto_install = false,
-          version = '21',
+          version = '25',
         },
         log = {
           use_console = false,
@@ -67,8 +67,8 @@ return {
 
       vim.lsp.config('jdtls', {
         cmd_env = {
-          JAVA_HOME = java_21_home,
-          PATH = java_21_bin .. ':' .. vim.env.PATH,
+          JAVA_HOME = java_25_home,
+          PATH = java_25_bin .. ':' .. vim.env.PATH,
           JAVA_TOOL_OPTIONS = '-Xmx4G',
         },
         settings = {
@@ -76,8 +76,8 @@ return {
             configuration = {
               runtimes = {
                 {
-                  name = 'JavaSE-21',
-                  path = java_21_home,
+                  name = 'JavaSE-25',
+                  path = java_25_home,
                   default = true,
                 },
               },

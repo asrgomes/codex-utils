@@ -1,0 +1,7 @@
+interface:
+  display_name: "JavaFX Expert"
+  short_description: "Build and debug Java 25+ JavaFX apps"
+  default_prompt: >-
+    Use $javafx-expert when implementing, testing, or debugging Java 25+ JavaFX applications, especially Maven modular
+    apps with JavaFX UI tests, records-backed tables, scene/dialog cursor issues, startup/runtime quirks, and opt-in
+    display-dependent integration tests.
