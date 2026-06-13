@@ -15,8 +15,10 @@ ignore_non_material_commits = true
 suppressed_branches = [
     "release/12.4.2.0",
     "release/26.4.2.0",
-    "release/12.4.1.0",
-    "release/26.4.1.0",
+    "release/12.4.0.2",
+    "release/26.4.0.2",
+    "release/12.4.0.1",
+    "release/26.4.0.1",
 ]
 
 # All repositories to scan (only SSH URLs allowed)

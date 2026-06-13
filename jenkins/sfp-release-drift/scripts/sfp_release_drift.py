@@ -805,7 +805,7 @@ def audit_repository(
                 logger.debug(f"{repo_name}: checking {target_name} contains {aws_branch.name}")
             if is_suppressed_branch(target_name, suppressed_branch_set):
                 if logger:
-                    logger.info(f"{repo_name}: suppressed drift check for {target_name}")
+                    logger.debug(f"{repo_name}: suppressed drift check for {target_name}")
                 continue
             if target_name not in oci_by_name:
                 if logger:
@@ -871,7 +871,7 @@ def audit_repository(
                     logger.debug(f"{repo_name}: checking {newer.name} contains {previous.name} ({family})")
                 if is_suppressed_branch(newer.name, suppressed_branch_set):
                     if logger:
-                        logger.info(f"{repo_name}: suppressed drift check for {newer.name}")
+                        logger.debug(f"{repo_name}: suppressed drift check for {newer.name}")
                     continue
                 commits = pending_commits(repo_dir, previous.name, newer.name)
                 material_commits, ignored_commits = split_material_and_ignored_commits(
