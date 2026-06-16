@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Planning and Execution"
+  short_description: "Plan, track, verify, and learn from tasks"
+  default_prompt: "Use $task-planning-and-execution to plan and execute this repo task with tracked verification."
