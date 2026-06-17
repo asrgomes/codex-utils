@@ -1,0 +1,4 @@
+interface:
+  display_name: "Handoff"
+  short_description: "Write concise continuation handoff docs"
+  default_prompt: "Use $handoff to write a concise handoff for continuing this work."
